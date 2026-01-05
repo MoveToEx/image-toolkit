@@ -11,7 +11,7 @@ import ImagePanel from './components/image-panel';
 import { useAppState } from './lib/hooks';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { closeFolder, save } from './client/apiClient';
-import { BrushTool, RectangleTool, ViewTool, SplitTool } from '@/lib/tools';
+import { BrushTool, RectangleTool, ViewTool, SplitTool, TrimTool } from '@/lib/tools';
 
 import './App.css'
 
@@ -45,7 +45,8 @@ function App() {
     new ViewTool(),
     new BrushTool(),
     new RectangleTool(),
-    new SplitTool()
+    new SplitTool(),
+    new TrimTool()
   ], []);
   const [activeToolId, setActiveToolId] = useState<string>(tools[0].id);
   const activeTool = tools.find(t => t.id === activeToolId)!;
@@ -78,6 +79,7 @@ function App() {
       setSelected(nextSelected);
     }
     await refresh();
+    activeTool.reset();
     setTimestamp(new Date().getTime());
 
     console.log('Serialized Data:', JSON.stringify(data, null, 2));

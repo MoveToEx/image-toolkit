@@ -1,5 +1,5 @@
 import { MouseEvent, WheelEvent, ReactNode } from 'react';
-import { Brush, Square, MousePointer2, LucideIcon, SquareSplitHorizontal, SquareSplitVertical, LayoutGrid } from 'lucide-react';
+import { Brush, Square, MousePointer2, LucideIcon, SquareSplitHorizontal, SquareSplitVertical, LayoutGrid, Crop } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -392,5 +392,152 @@ export class SplitTool extends Tool {
 
   drawSplit(ctx: CanvasRenderingContext2D, p: Point, scale: number, image: HTMLImageElement) {
     this.drawLine(ctx, p, this._mode, scale, image);
+  }
+}
+
+export class TrimTool extends Tool {
+  id = 'trim';
+  name = 'Trim';
+  icon = Crop;
+
+  top = 0;
+  bottom = 0;
+  left = 0;
+  right = 0;
+
+  private dragging: 'top' | 'bottom' | 'left' | 'right' | null = null;
+
+  reset() {
+    this.top = 0;
+    this.bottom = 0;
+    this.left = 0;
+    this.right = 0;
+  }
+
+  getData() {
+    return {
+      top: Math.round(this.top),
+      bottom: Math.round(this.bottom),
+      left: Math.round(this.left),
+      right: Math.round(this.right)
+    };
+  }
+
+  onMouseDown(event: ToolEvent<MouseEvent>, context: ToolContext) {
+    if (!context.image) return;
+    const { x, y } = event.imagePoint;
+    const { width, height } = context.image;
+    const threshold = 10 / context.transform.scale; // 10 screen pixels tolerance
+
+    // Check proximity to lines
+    // Top line: y = this.top
+    if (Math.abs(y - this.top) < threshold) {
+      this.dragging = 'top';
+    }
+    // Bottom line: y = height - this.bottom
+    else if (Math.abs(y - (height - this.bottom)) < threshold) {
+      this.dragging = 'bottom';
+    }
+    // Left line: x = this.left
+    else if (Math.abs(x - this.left) < threshold) {
+      this.dragging = 'left';
+    }
+    // Right line: x = width - this.right
+    else if (Math.abs(x - (width - this.right)) < threshold) {
+      this.dragging = 'right';
+    }
+  }
+
+  onMouseMove(event: ToolEvent<MouseEvent>, context: ToolContext) {
+    if (!context.image) return;
+    const { width, height } = context.image;
+    const { x, y } = event.imagePoint;
+
+    if (this.dragging) {
+      if (this.dragging === 'top') {
+        this.top = Math.max(0, Math.min(y, height - this.bottom - 10));
+      } else if (this.dragging === 'bottom') {
+        this.bottom = Math.max(0, Math.min(height - y, height - this.top - 10));
+      } else if (this.dragging === 'left') {
+        this.left = Math.max(0, Math.min(x, width - this.right - 10));
+      } else if (this.dragging === 'right') {
+        this.right = Math.max(0, Math.min(width - x, width - this.left - 10));
+      }
+      return;
+    }
+
+    // Update cursor
+    const threshold = 10 / context.transform.scale;
+    const canvas = context.canvas;
+
+    if (Math.abs(y - this.top) < threshold || Math.abs(y - (height - this.bottom)) < threshold) {
+      canvas.style.cursor = 'ns-resize';
+    } else if (Math.abs(x - this.left) < threshold || Math.abs(x - (width - this.right)) < threshold) {
+      canvas.style.cursor = 'ew-resize';
+    } else {
+      canvas.style.cursor = 'default';
+    }
+  }
+
+  onMouseUp(event: ToolEvent<MouseEvent>, context: ToolContext) {
+    this.dragging = null;
+  }
+
+  onMouseLeave(event: ToolEvent<MouseEvent>, context: ToolContext) {
+    this.dragging = null;
+  }
+
+  render(context: ToolContext) {
+    const { ctx, transform, image } = context;
+    if (!image) return;
+    const { x, y, scale } = transform;
+    const { width, height } = image;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    // Draw semi-transparent overlay on trimmed areas
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+
+    // Top area
+    if (this.top > 0) ctx.fillRect(0, 0, width, this.top);
+    // Bottom area
+    if (this.bottom > 0) ctx.fillRect(0, height - this.bottom, width, this.bottom);
+    // Left area (between top and bottom)
+    if (this.left > 0) ctx.fillRect(0, this.top, this.left, height - this.top - this.bottom);
+    // Right area (between top and bottom)
+    if (this.right > 0) ctx.fillRect(width - this.right, this.top, this.right, height - this.top - this.bottom);
+
+    // Draw lines
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1 / scale;
+    ctx.setLineDash([5 / scale, 5 / scale]);
+
+    // Top line
+    ctx.beginPath();
+    ctx.moveTo(0, this.top);
+    ctx.lineTo(width, this.top);
+    ctx.stroke();
+
+    // Bottom line
+    ctx.beginPath();
+    ctx.moveTo(0, height - this.bottom);
+    ctx.lineTo(width, height - this.bottom);
+    ctx.stroke();
+
+    // Left line
+    ctx.beginPath();
+    ctx.moveTo(this.left, 0);
+    ctx.lineTo(this.left, height);
+    ctx.stroke();
+
+    // Right line
+    ctx.beginPath();
+    ctx.moveTo(width - this.right, 0);
+    ctx.lineTo(width - this.right, height);
+    ctx.stroke();
+
+    ctx.restore();
   }
 }

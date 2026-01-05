@@ -96,10 +96,16 @@ class SplitTool(_BaseModel):
     mode: Literal['cross', 'horizontal', 'vertical']
     point: Point
 
+class TrimTool(_BaseModel):
+    id: Literal['trim']
+    top: int
+    bottom: int
+    left: int
+    right: int
 
 class SaveArgs(_BaseModel):
     current: str
-    tool: BrushTool | RectTool | SplitTool
+    tool: BrushTool | RectTool | SplitTool | TrimTool
     caption: str
     caption_prefix: str
 
@@ -154,20 +160,20 @@ async def save(state: Annotated[AppState, State()], body: SaveArgs) -> str | Non
             pt = body.tool.point
             if body.tool.mode == 'cross':
                 cropped = [
-                    img.copy().crop((0, 0, pt.x, pt.y)),
-                    img.copy().crop((pt.x + 1, 0, width, pt.y)),
-                    img.copy().crop((0, pt.y + 1, pt.x, height)),
-                    img.copy().crop((pt.x + 1, pt.y + 1, width, height))
+                    img.crop((0, 0, pt.x, pt.y)),
+                    img.crop((pt.x + 1, 0, width, pt.y)),
+                    img.crop((0, pt.y + 1, pt.x, height)),
+                    img.crop((pt.x + 1, pt.y + 1, width, height))
                 ]
             elif body.tool.mode == 'horizontal':
                 cropped = [
-                    img.copy().crop((0, 0, pt.x, height)),
-                    img.copy().crop((pt.x + 1, 0, width, height))
+                    img.crop((0, 0, pt.x, height)),
+                    img.crop((pt.x + 1, 0, width, height))
                 ]
             elif body.tool.mode == 'vertical':
                 cropped = [
-                    img.copy().crop((0, 0, width, pt.y)),
-                    img.copy().crop((0, pt.y + 1, width, height))
+                    img.crop((0, 0, width, pt.y)),
+                    img.crop((0, pt.y + 1, width, height))
                 ]
 
             stem, ext = splitext(item.image)
@@ -187,6 +193,8 @@ async def save(state: Annotated[AppState, State()], body: SaveArgs) -> str | Non
             item.caption.unlink()
             state.items.pop(idx)
             result = stem + '_1' + ext
+        elif body.tool.id == 'trim':
+            img.crop((body.tool.left, body.tool.top, width - body.tool.right, height - body.tool.bottom)).save(item.image)
 
     return result
             
