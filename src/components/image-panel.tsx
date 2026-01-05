@@ -97,14 +97,16 @@ export default function ImagePanel({ src, activeTool }: ImagePanelProps) {
 
                 // Clip for tool rendering
                 ctx.save();
-                ctx.beginPath();
-                ctx.rect(
-                    transform.x, 
-                    transform.y, 
-                    imageRef.current.width * transform.scale, 
-                    imageRef.current.height * transform.scale
-                );
-                ctx.clip();
+                if (tool.clip) {
+                    ctx.beginPath();
+                    ctx.rect(
+                        transform.x, 
+                        transform.y, 
+                        imageRef.current.width * transform.scale, 
+                        imageRef.current.height * transform.scale
+                    );
+                    ctx.clip();
+                }
             }
 
             // Draw Tool Overlay

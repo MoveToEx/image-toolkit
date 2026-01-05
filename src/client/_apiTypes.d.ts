@@ -13,7 +13,7 @@ export type Captionstr = string
 export type Items = DatasetItem[]
 export type RootModelNoneType = null
 export type Current = string
-export type Tool = (BrushTool | RectTool | SplitTool | TrimTool)
+export type Tool = (BrushTool | RectTool | SplitTool | TrimTool | ExpandTool)
 export type Id = "brush"
 export type Color = string
 export type Width = number
@@ -31,6 +31,12 @@ export type Top = number
 export type Bottom = number
 export type Left = number
 export type Right = number
+export type Id4 = "expand"
+export type Color2 = string
+export type Top1 = number
+export type Bottom1 = number
+export type Left1 = number
+export type Right1 = number
 export type Caption1 = string
 export type Captionprefix1 = string
 export type RootModelUnionStrNoneType = (string | null)
@@ -106,4 +112,12 @@ top: Top
 bottom: Bottom
 left: Left
 right: Right
+}
+export interface ExpandTool {
+id: Id4
+color: Color2
+top: Top1
+bottom: Bottom1
+left: Left1
+right: Right1
 }

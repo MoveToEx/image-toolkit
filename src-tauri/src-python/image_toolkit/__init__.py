@@ -103,9 +103,17 @@ class TrimTool(_BaseModel):
     left: int
     right: int
 
+class ExpandTool(_BaseModel):
+    id: Literal['expand']
+    color: str
+    top: int
+    bottom: int
+    left: int
+    right: int
+
 class SaveArgs(_BaseModel):
     current: str
-    tool: BrushTool | RectTool | SplitTool | TrimTool
+    tool: BrushTool | RectTool | SplitTool | TrimTool | ExpandTool
     caption: str
     caption_prefix: str
 
@@ -195,6 +203,13 @@ async def save(state: Annotated[AppState, State()], body: SaveArgs) -> str | Non
             result = stem + '_1' + ext
         elif body.tool.id == 'trim':
             img.crop((body.tool.left, body.tool.top, width - body.tool.right, height - body.tool.bottom)).save(item.image)
+        elif body.tool.id == 'expand':
+            expanded = Image.new(img.mode, (
+                width + body.tool.left + body.tool.right,
+                height + body.tool.top + body.tool.bottom
+            ), body.tool.color)
+            expanded.paste(img, (body.tool.left, body.tool.top))
+            expanded.save(item.image)
 
     return result
             

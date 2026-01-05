@@ -11,9 +11,11 @@ import ImagePanel from './components/image-panel';
 import { useAppState } from './lib/hooks';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { closeFolder, save } from './client/apiClient';
-import { BrushTool, RectangleTool, ViewTool, SplitTool, TrimTool } from '@/lib/tools';
+import { BrushTool, RectangleTool, ViewTool, SplitTool, TrimTool, ExpandTool } from '@/lib/tools';
 
 import './App.css'
+import { Toaster } from './components/ui/sonner';
+import { toast } from 'sonner';
 
 function App() {
   const { appState, select, refresh } = useAppState();
@@ -26,6 +28,8 @@ function App() {
   // Temporary State
   const [tempCaption, setTempCaption] = useState<string>('');
   const [tempPrefix, setTempPrefix] = useState<string>('');
+
+  // used only for refreshing image
   const [timestamp, setTimestamp] = useState(() => new Date().getTime());
 
   useEffect(() => {
@@ -46,7 +50,8 @@ function App() {
     new BrushTool(),
     new RectangleTool(),
     new SplitTool(),
-    new TrimTool()
+    new TrimTool(),
+    new ExpandTool()
   ], []);
   const [activeToolId, setActiveToolId] = useState<string>(tools[0].id);
   const activeTool = tools.find(t => t.id === activeToolId)!;
@@ -70,11 +75,17 @@ function App() {
       caption: tempCaption,
       captionPrefix: tempPrefix,
     };
-
-    console.log(data);
-
-    const nextSelected = await save(data);
-
+    
+    let nextSelected;
+    try {
+      nextSelected = await save(data);
+      toast.success('Saved');
+    }
+    catch (e) {
+      if (e instanceof Error) {
+        toast.error('Failed: ' + e.message);
+      }
+    }
     if (nextSelected) {
       setSelected(nextSelected);
     }
@@ -100,6 +111,7 @@ function App() {
 
   return (
     <div className='w-full h-full flex flex-col'>
+      <Toaster />
       <TopBar onMenuClicked={handleMenu} />
       <ResizablePanelGroup direction='horizontal'>
         <ResizablePanel defaultSize={20}>

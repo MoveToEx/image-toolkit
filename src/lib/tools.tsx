@@ -1,5 +1,5 @@
 import { MouseEvent, WheelEvent, ReactNode } from 'react';
-import { Brush, Square, MousePointer2, LucideIcon, SquareSplitHorizontal, SquareSplitVertical, LayoutGrid, Crop } from 'lucide-react';
+import { Brush, Square, MousePointer2, LucideIcon, SquareSplitHorizontal, SquareSplitVertical, LayoutGrid, Crop, Maximize } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -45,6 +45,8 @@ export abstract class Tool {
   onWheel(event: ToolEvent<WheelEvent>, context: ToolContext): void { }
 
   abstract render(context: ToolContext): void;
+
+  get clip(): boolean { return true; }
 
   reset(): void { }
   getData(): any { return null; }
@@ -537,6 +539,188 @@ export class TrimTool extends Tool {
     ctx.moveTo(width - this.right, 0);
     ctx.lineTo(width - this.right, height);
     ctx.stroke();
+
+    ctx.restore();
+  }
+}
+
+export class ExpandTool extends Tool {
+  id = 'expand';
+  name = 'Expand';
+  icon = Maximize;
+
+  get clip() { return false; }
+
+  top = 0;
+  bottom = 0;
+  left = 0;
+  right = 0;
+  color = '#ffffff';
+
+  private dragging: 'top' | 'bottom' | 'left' | 'right' | null = null;
+
+  reset() {
+    this.top = 0;
+    this.bottom = 0;
+    this.left = 0;
+    this.right = 0;
+  }
+
+  getData() {
+    return {
+      top: Math.round(this.top),
+      bottom: Math.round(this.bottom),
+      left: Math.round(this.left),
+      right: Math.round(this.right),
+      color: this.color
+    };
+  }
+
+  renderOptions({ onChange }: { onChange: () => void }) {
+    return (
+      <div className="mt-6 space-y-4">
+        <div>
+          <Label className="mb-2 block text-sm font-medium text-muted-foreground">Fill Color</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="color"
+              value={this.color}
+              onChange={(e) => {
+                this.color = e.target.value;
+                onChange();
+              }}
+              className="w-12 h-8 p-1 cursor-pointer"
+            />
+            <span className="text-xs text-muted-foreground">{this.color}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  onMouseDown(event: ToolEvent<MouseEvent>, context: ToolContext) {
+    if (!context.image) return;
+    const { x, y } = event.imagePoint;
+    const { width, height } = context.image;
+    const threshold = 10 / context.transform.scale;
+
+    // Check proximity to expanded boundaries
+    // Top: y = -this.top
+    if (Math.abs(y - (-this.top)) < threshold) {
+      this.dragging = 'top';
+    }
+    // Bottom: y = height + this.bottom
+    else if (Math.abs(y - (height + this.bottom)) < threshold) {
+      this.dragging = 'bottom';
+    }
+    // Left: x = -this.left
+    else if (Math.abs(x - (-this.left)) < threshold) {
+      this.dragging = 'left';
+    }
+    // Right: x = width + this.right
+    else if (Math.abs(x - (width + this.right)) < threshold) {
+      this.dragging = 'right';
+    }
+  }
+
+  onMouseMove(event: ToolEvent<MouseEvent>, context: ToolContext) {
+    if (!context.image) return;
+    const { width, height } = context.image;
+    const { x, y } = event.imagePoint;
+
+    if (this.dragging) {
+      if (this.dragging === 'top') {
+        // Dragging up (negative y) increases top
+        this.top = Math.max(0, -y);
+      } else if (this.dragging === 'bottom') {
+        // Dragging down (y > height) increases bottom
+        this.bottom = Math.max(0, y - height);
+      } else if (this.dragging === 'left') {
+        // Dragging left (negative x) increases left
+        this.left = Math.max(0, -x);
+      } else if (this.dragging === 'right') {
+        // Dragging right (x > width) increases right
+        this.right = Math.max(0, x - width);
+      }
+      return;
+    }
+
+    // Update cursor
+    const threshold = 10 / context.transform.scale;
+    const canvas = context.canvas;
+
+    if (Math.abs(y - (-this.top)) < threshold || Math.abs(y - (height + this.bottom)) < threshold) {
+      canvas.style.cursor = 'ns-resize';
+    } else if (Math.abs(x - (-this.left)) < threshold || Math.abs(x - (width + this.right)) < threshold) {
+      canvas.style.cursor = 'ew-resize';
+    } else {
+      canvas.style.cursor = 'default';
+    }
+  }
+
+  onMouseUp(event: ToolEvent<MouseEvent>, context: ToolContext) {
+    this.dragging = null;
+  }
+
+  onMouseLeave(event: ToolEvent<MouseEvent>, context: ToolContext) {
+    this.dragging = null;
+  }
+
+  render(context: ToolContext) {
+    const { ctx, transform, image } = context;
+    if (!image) return;
+    const { x, y, scale } = transform;
+    const { width, height } = image;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    // Draw expanded areas
+    ctx.fillStyle = this.color;
+
+    // Top
+    if (this.top > 0) ctx.fillRect(-this.left, -this.top, width + this.left + this.right, this.top);
+    // Bottom
+    if (this.bottom > 0) ctx.fillRect(-this.left, height, width + this.left + this.right, this.bottom);
+    // Left
+    if (this.left > 0) ctx.fillRect(-this.left, 0, this.left, height);
+    // Right
+    if (this.right > 0) ctx.fillRect(width, 0, this.right, height);
+
+    // Draw boundary lines
+    ctx.strokeStyle = '#000'; // Use black for contrast against potentially white fill
+    ctx.lineWidth = 1 / scale;
+    ctx.setLineDash([5 / scale, 5 / scale]);
+
+    // Top line
+    ctx.beginPath();
+    ctx.moveTo(-this.left, -this.top);
+    ctx.lineTo(width + this.right, -this.top);
+    ctx.stroke();
+
+    // Bottom line
+    ctx.beginPath();
+    ctx.moveTo(-this.left, height + this.bottom);
+    ctx.lineTo(width + this.right, height + this.bottom);
+    ctx.stroke();
+
+    // Left line
+    ctx.beginPath();
+    ctx.moveTo(-this.left, -this.top);
+    ctx.lineTo(-this.left, height + this.bottom);
+    ctx.stroke();
+
+    // Right line
+    ctx.beginPath();
+    ctx.moveTo(width + this.right, -this.top);
+    ctx.lineTo(width + this.right, height + this.bottom);
+    ctx.stroke();
+
+    // Draw original image boundary for reference
+    ctx.strokeStyle = '#888';
+    ctx.setLineDash([]);
+    ctx.strokeRect(0, 0, width, height);
 
     ctx.restore();
   }
