@@ -1,5 +1,3 @@
-import sys
-
 from anyio.from_thread import start_blocking_portal
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
@@ -17,7 +15,7 @@ from pathlib import Path
 from os import getenv
 from os.path import splitext
 from pytauri.webview import WebviewWindow
-from typing import Union, Annotated, Literal
+from typing import Annotated, Literal
 from PIL import Image, ImageDraw
 
 from image_toolkit.utils import get_common_prefix
@@ -153,16 +151,19 @@ async def save(state: Annotated[AppState, State()], body: SaveArgs) -> str | Non
         if body.tool.id == 'brush':
             draw = ImageDraw.ImageDraw(img)
             for it in body.tool.drawing:
+                pts = []
                 for pt in it.points:
-                    draw.circle([pt.x, pt.y], it.width, it.color)
-            img.save(item.image)
+                    pts.append(pt.x)
+                    pts.append(pt.y)
+                draw.line(pts, it.color, it.width)
+            img.save(item.image, quality=100)
         elif body.tool.id == 'rect':
             draw = ImageDraw.ImageDraw(img)
             for it in body.tool.drawing:
                 l, t, r, b = min(it.start.x, it.end.x), min(it.start.y, it.end.y), max(it.start.x, it.end.x), max(it.start.y, it.end.y)
                 l, t, r, b = max(0, l), max(0, t), min(width, r), min(height, b)
                 draw.rectangle((l, t, r, b), it.color, width=0)
-            img.save(item.image)
+            img.save(item.image, quality=100)
         elif body.tool.id == 'split':
             cropped = []
             pt = body.tool.point
@@ -187,7 +188,7 @@ async def save(state: Annotated[AppState, State()], body: SaveArgs) -> str | Non
             stem, ext = splitext(item.image)
             for i, it in enumerate(cropped):
                 fn = item.image.parent / (stem + f'_{i + 1}' + ext)
-                it.save(fn)
+                it.save(fn, quality=100)
                 with open(item.image.parent / (stem + f'_{i + 1}' + '.txt'), 'w') as f:
                     f.write(state.caption_prefix + item.caption_str)
 
@@ -202,14 +203,14 @@ async def save(state: Annotated[AppState, State()], body: SaveArgs) -> str | Non
             state.items.pop(idx)
             result = stem + '_1' + ext
         elif body.tool.id == 'trim':
-            img.crop((body.tool.left, body.tool.top, width - body.tool.right, height - body.tool.bottom)).save(item.image)
+            img.crop((body.tool.left, body.tool.top, width - body.tool.right, height - body.tool.bottom)).save(item.image, quality=100)
         elif body.tool.id == 'expand':
             expanded = Image.new(img.mode, (
                 width + body.tool.left + body.tool.right,
                 height + body.tool.top + body.tool.bottom
             ), body.tool.color)
             expanded.paste(img, (body.tool.left, body.tool.top))
-            expanded.save(item.image)
+            expanded.save(item.image, quality=100)
 
     return result
             

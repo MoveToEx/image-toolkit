@@ -1,7 +1,21 @@
-# Tauri + React + Typescript
+# image-toolkit
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+A utility tool used to accelerate image dataset processing.  
 
-## Recommended IDE Setup
+Based on [PyTauri](https://pytauri.github.io/pytauri/latest/) and [React](https://react.dev/).
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+## Setup
+
+Prerequisites:
+- [uv](https://docs.astral.sh/uv/)
+- [Node.js](https://nodejs.org/)
+- Rust toolchain (`cargo`)
+
+```sh
+$ git clone https://github.com/MoveToEx/image-toolkit.git
+$ cd image-toolkit
+$ uv sync                         # install Python dependencies
+$ yarn                            # install JS dependencies
+$ source ./.venv/Scripts/activate # activate venv
+$ yarn tauri dev                  # run in dev mode
+```
