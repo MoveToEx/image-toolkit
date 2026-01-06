@@ -38,11 +38,11 @@ export abstract class Tool {
   variants?: ToolVariant[];
   setVariant?(variantId: string): void;
 
-  onMouseDown(event: ToolEvent<MouseEvent>, context: ToolContext): void { }
-  onMouseMove(event: ToolEvent<MouseEvent>, context: ToolContext): void { }
-  onMouseUp(event: ToolEvent<MouseEvent>, context: ToolContext): void { }
-  onMouseLeave(event: ToolEvent<MouseEvent>, context: ToolContext): void { }
-  onWheel(event: ToolEvent<WheelEvent>, context: ToolContext): void { }
+  onMouseDown(_event: ToolEvent<MouseEvent>, _context: ToolContext): void { }
+  onMouseMove(_event: ToolEvent<MouseEvent>, _context: ToolContext): void { }
+  onMouseUp(_event: ToolEvent<MouseEvent>, _context: ToolContext): void { }
+  onMouseLeave(_event: ToolEvent<MouseEvent>, _context: ToolContext): void { }
+  onWheel(_event: ToolEvent<WheelEvent>, _context: ToolContext): void { }
 
   abstract render(context: ToolContext): void;
 
@@ -50,7 +50,7 @@ export abstract class Tool {
 
   reset(): void { }
   getData(): any { return null; }
-  renderOptions(props: { onChange: () => void }): ReactNode { return null; }
+  renderOptions(_props: { onChange: () => void }): ReactNode { return null; }
 }
 
 // --- Shared States ---
@@ -77,7 +77,7 @@ export class ViewTool extends Tool {
   name = 'View';
   icon = MousePointer2;
 
-  render(context: ToolContext) {
+  render() {
     // Nothing to render
   }
 }
@@ -121,7 +121,7 @@ export class BrushTool extends Tool {
     );
   }
 
-  onMouseDown(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseDown(event: ToolEvent<MouseEvent>) {
     if (event.originalEvent.button !== 0) return;
     this.isDrawing = true;
     this.currentShape = {
@@ -131,12 +131,12 @@ export class BrushTool extends Tool {
     };
   }
 
-  onMouseMove(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseMove(event: ToolEvent<MouseEvent>) {
     if (!this.isDrawing || !this.currentShape) return;
     this.currentShape.points.push(event.imagePoint);
   }
 
-  onMouseUp(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseUp() {
     if (this.isDrawing && this.currentShape) {
       this.shapes.push(this.currentShape);
       this.currentShape = null;
@@ -214,7 +214,7 @@ export class RectangleTool extends Tool {
     );
   }
 
-  onMouseDown(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseDown(event: ToolEvent<MouseEvent>) {
     if (event.originalEvent.button !== 0) return;
     this.isDrawing = true;
     this.currentShape = {
@@ -224,12 +224,12 @@ export class RectangleTool extends Tool {
     };
   }
 
-  onMouseMove(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseMove(event: ToolEvent<MouseEvent>) {
     if (!this.isDrawing || !this.currentShape) return;
     this.currentShape.end = event.imagePoint;
   }
 
-  onMouseUp(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseUp() {
     if (this.isDrawing && this.currentShape) {
       this.shapes.push(this.currentShape);
       this.currentShape = null;
@@ -302,7 +302,7 @@ export class SplitTool extends Tool {
 
   get mode() { return this._mode; }
 
-  onMouseDown(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseDown(event: ToolEvent<MouseEvent>) {
     if (event.originalEvent.button === 0) {
       this.updateSplitPoint(event.imagePoint);
     }
@@ -323,11 +323,11 @@ export class SplitTool extends Tool {
     this.hoverPoint = null;
   }
 
-  onMouseLeave(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseLeave() {
     this.hoverPoint = null;
   }
 
-  protected drawLine(ctx: CanvasRenderingContext2D, p: Point, type: 'horizontal' | 'vertical' | 'cross', scale: number, image: HTMLImageElement) {
+  protected drawLine(ctx: CanvasRenderingContext2D, p: Point, type: 'horizontal' | 'vertical' | 'cross', _scale: number, image: HTMLImageElement) {
     ctx.beginPath();
     if (type === 'vertical' || type === 'cross') {
       ctx.moveTo(0, p.y);
@@ -481,11 +481,11 @@ export class TrimTool extends Tool {
     }
   }
 
-  onMouseUp(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseUp() {
     this.dragging = null;
   }
 
-  onMouseLeave(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseLeave() {
     this.dragging = null;
   }
 
@@ -658,11 +658,11 @@ export class ExpandTool extends Tool {
     }
   }
 
-  onMouseUp(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseUp() {
     this.dragging = null;
   }
 
-  onMouseLeave(event: ToolEvent<MouseEvent>, context: ToolContext) {
+  onMouseLeave() {
     this.dragging = null;
   }
 

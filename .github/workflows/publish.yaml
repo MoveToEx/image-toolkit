@@ -60,21 +60,16 @@ jobs:
           enable-cache: true
           # version-file: "pyproject.toml"
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          # Optional: when there is a `packageManager` field in the `package.json`
-          version: "latest"
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           # Or: `node-version-file: package.json`
-          node-version: lts/*
-          cache: "pnpm"
+          node-version: 24.12.0
+          cache: 'yarn'
 
       - name: Install project dependencies
         run: |
-          pnpm install
+          yarn install --immutable
 
       # See:
       # - <https://github.com/astral-sh/python-build-standalone/releases>
@@ -82,8 +77,8 @@ jobs:
       # - <https://gregoryszorc.com/docs/python-build-standalone/main/running.html#obtaining-distributions>
       - name: Download python-build-standalone
         env:
-          PYTHON_VERSION: "3.13.7" # update this by yourself
-          TAG: "20250828" # update this by yourself
+          PYTHON_VERSION: "3.14.0"
+          TAG: "20251120"
           TARGET: ${{ matrix.target }}
         run: |
           url="https://github.com/astral-sh/python-build-standalone/releases/download/${TAG}/cpython-${PYTHON_VERSION}+${TAG}-${TARGET}-install_only_stripped.tar.gz"

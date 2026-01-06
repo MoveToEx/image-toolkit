@@ -27,4 +27,7 @@ exclude = [
     # it will copy `pyembed` to the target directory (i.e., rust output dir).
     "**/target",
     # 👆
+    "**/.venv",
+    "**/.*",
+    "src-tauri/frontend/",
 ]
