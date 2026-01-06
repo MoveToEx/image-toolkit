@@ -13,7 +13,7 @@ export type Captionstr = string
 export type Items = DatasetItem[]
 export type RootModelNoneType = null
 export type Current = string
-export type Tool = (BrushTool | RectTool | SplitTool | TrimTool | ExpandTool)
+export type Tool = (BrushTool | RectTool | SplitTool | TrimTool | ExpandTool | ViewTool)
 export type Id = "brush"
 export type Color = string
 export type Width = number
@@ -37,9 +37,11 @@ export type Top1 = number
 export type Bottom1 = number
 export type Left1 = number
 export type Right1 = number
+export type Id5 = "view"
 export type Caption1 = string
 export type Captionprefix1 = string
 export type RootModelUnionStrNoneType = (string | null)
+export type RootModelStr = string
 export type RootModelBool = boolean
 
 /**
@@ -57,6 +59,10 @@ output: RootModelNoneType
 save: {
 input: SaveArgs
 output: RootModelUnionStrNoneType
+}
+delete_item: {
+input: RootModelStr
+output: RootModelNoneType
 }
 select_folder: {
 input: void | undefined
@@ -120,4 +126,7 @@ top: Top1
 bottom: Bottom1
 left: Left1
 right: Right1
+}
+export interface ViewTool {
+id: Id5
 }

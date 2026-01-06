@@ -73,6 +73,10 @@ class BrushState(_BaseModel):
     points: list[Point]
 
 
+class ViewTool(_BaseModel):
+    id: Literal['view']
+
+
 class BrushTool(_BaseModel):
     id: Literal['brush']
     drawing: list[BrushState]
@@ -111,7 +115,7 @@ class ExpandTool(_BaseModel):
 
 class SaveArgs(_BaseModel):
     current: str
-    tool: BrushTool | RectTool | SplitTool | TrimTool | ExpandTool
+    tool: BrushTool | RectTool | SplitTool | TrimTool | ExpandTool | ViewTool
     caption: str
     caption_prefix: str
 
@@ -148,7 +152,9 @@ async def save(state: Annotated[AppState, State()], body: SaveArgs) -> str | Non
         img = Image.open(item.image)
         width, height = img.size
 
-        if body.tool.id == 'brush':
+        if body.tool.id == 'view':
+            pass
+        elif body.tool.id == 'brush':
             draw = ImageDraw.ImageDraw(img)
             for it in body.tool.drawing:
                 pts = []
@@ -214,8 +220,23 @@ async def save(state: Annotated[AppState, State()], body: SaveArgs) -> str | Non
 
     return result
             
+@commands.command()
+async def delete_item(state: Annotated[AppState, State()], body: str) -> None:
+    item = None
+    idx = 0
 
+    for i, it in enumerate(state.items):
+        if it.image == Path(body):
+            item = it
+            idx = i
+            break
+    if item is None:
+        return
+    
+    item.caption.unlink()
+    item.image.unlink()
 
+    state.items.pop(idx)
 
 
 @commands.command()

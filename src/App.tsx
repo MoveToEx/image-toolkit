@@ -10,7 +10,7 @@ import CaptionPanel from './components/caption-panel';
 import ImagePanel from './components/image-panel';
 import { useAppState } from './lib/hooks';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { closeFolder, save } from './client/apiClient';
+import { closeFolder, save, deleteItem } from './client/apiClient';
 import { BrushTool, RectangleTool, ViewTool, SplitTool, TrimTool, ExpandTool } from '@/lib/tools';
 
 import './App.css'
@@ -88,6 +88,8 @@ function App() {
     catch (e) {
       if (e instanceof Error) {
         toast.error('Failed: ' + e.message);
+      } else {
+        toast.error('Failed: ' + String(e).slice(0, 32));
       }
     }
     finally {
@@ -101,6 +103,26 @@ function App() {
     setTimestamp(new Date().getTime());
 
     console.log('Serialized Data:', JSON.stringify(data, null, 2));
+  };
+
+  const handleDelete = async (item: string) => {
+    setRunning(true);
+    try {
+      await deleteItem(item);
+      toast.success('Deleted');
+      if (selected === item) {
+        setSelected(null);
+      }
+      await refresh();
+    } catch (e) {
+      if (e instanceof Error) {
+        toast.error('Failed: ' + e.message);
+      } else {
+        toast.error('Failed: ' + String(e));
+      }
+    } finally {
+      setRunning(false);
+    }
   };
 
   const handleMenu = async (op: Operation) => {
@@ -188,6 +210,7 @@ function App() {
               setSelected(val);
             }}
             selected={selected}
+            onDelete={handleDelete}
           />
 
         </ResizablePanel>

@@ -31,6 +31,13 @@ export async function save(
     return await pyInvoke("save", body, options);
 }
 
+export async function deleteItem(
+    body: Commands["delete_item"]["input"],
+    options?: InvokeOptions
+): Promise<Commands["delete_item"]["output"]> {
+    return await pyInvoke("delete_item", body, options);
+}
+
 export async function selectFolder(
     body: Commands["select_folder"]["input"],
     options?: InvokeOptions
