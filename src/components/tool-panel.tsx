@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Spinner } from './ui/spinner';
 
 interface ToolPanelProps {
   tools: Tool[];
@@ -18,6 +19,7 @@ interface ToolPanelProps {
   onToolChange: (toolId: string) => void;
   onReset?: () => void;
   onSave?: () => void;
+  running: boolean;
 }
 
 export default function ToolPanel({
@@ -25,7 +27,8 @@ export default function ToolPanel({
   activeToolId,
   onToolChange,
   onReset,
-  onSave
+  onSave,
+  running,
 }: ToolPanelProps) {
   const activeTool = tools.find(t => t.id === activeToolId);
 
@@ -104,8 +107,10 @@ export default function ToolPanel({
       </ScrollArea>
 
       <div className="p-4 flex gap-2">
-        <Button className='flex-1' onClick={onSave}>
-          <Save className="mr-2 h-4 w-4" /> Apply
+        <Button className='flex-1' onClick={onSave} disabled={running}>
+          {running && <Spinner className="mr-2 h-4 w-4" />}
+          {running || <Save className="mr-2 h-4 w-4" />}
+          Apply
         </Button>
         <Button variant="outline" size="icon" onClick={onReset} title="Reset">
           <RotateCcw className="h-4 w-4" />

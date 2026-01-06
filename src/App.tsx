@@ -18,7 +18,7 @@ import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 
 function App() {
-  const { appState, select, refresh } = useAppState();
+  const { appState, select, refresh, loading } = useAppState();
   const [selected, setSelected] = useState<string | null>(null);
   const selectedItem = useMemo(
     () => appState.items?.find(it => it.image === selected),
@@ -31,6 +31,8 @@ function App() {
 
   // used only for refreshing image
   const [timestamp, setTimestamp] = useState(() => new Date().getTime());
+
+  const [running, setRunning] = useState(false);
 
   useEffect(() => {
     if (selectedItem) {
@@ -66,6 +68,8 @@ function App() {
   };
 
   const handleSave = async () => {
+    setRunning(true);
+
     const data = {
       tool: {
         id: activeTool.id,
@@ -85,6 +89,9 @@ function App() {
       if (e instanceof Error) {
         toast.error('Failed: ' + e.message);
       }
+    }
+    finally {
+      setRunning(false);
     }
     if (nextSelected) {
       setSelected(nextSelected);
@@ -121,6 +128,7 @@ function App() {
             onToolChange={handleToolChange}
             onReset={handleReset}
             onSave={handleSave}
+            running={running || loading}
           />
         </ResizablePanel>
         <ResizableHandle withHandle />
