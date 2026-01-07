@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, Sequence, Callable
 
 def pairwise_common_prefix(a: str, b: str) -> str:
     result = ''
@@ -21,3 +21,10 @@ def get_common_prefix(s: Iterable[str]) -> str:
             result = pairwise_common_prefix(result, it)
 
     return result
+
+def where[T](seq: Sequence[T], pred: Callable[[T], bool]):
+    for i, it in enumerate(seq):
+        if pred(it):
+            return it, i
+        
+    raise RuntimeError('Value not found')

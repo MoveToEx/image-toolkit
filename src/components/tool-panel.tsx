@@ -28,7 +28,7 @@ export default function ToolPanel({
   onToolChange,
   onReset,
   onSave,
-  running,
+  running
 }: ToolPanelProps) {
   const activeTool = tools.find(t => t.id === activeToolId);
 

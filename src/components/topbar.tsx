@@ -2,8 +2,9 @@ import { CircleX, Folder, Layers, Parentheses, RefreshCcw, SquareSlash } from "l
 import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarSeparator, MenubarSub, MenubarSubContent, MenubarSubTrigger, MenubarTrigger } from "./ui/menubar";
 
 type FileOperation = 'open_folder' | 'close' | 'refresh';
+type BatchOperation = 'escape' | 'unescape';
 
-export type Operation = `file:${FileOperation}`
+export type Operation = `file:${FileOperation}` | `batch:${BatchOperation}`
 
 export default function TopBar({
   onMenuClicked,

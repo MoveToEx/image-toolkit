@@ -1,7 +1,7 @@
 import TopBar, { Operation } from '@/components/topbar'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import ToolPanel from './components/tool-panel'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './components/ui/empty';
 import { Image } from 'lucide-react';
 import { Button } from './components/ui/button';
@@ -11,7 +11,7 @@ import ImagePanel from './components/image-panel';
 import { useAppState } from './lib/hooks';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { closeFolder, save, deleteItem } from './client/apiClient';
-import { BrushTool, RectangleTool, ViewTool, SplitTool, TrimTool, ExpandTool } from '@/lib/tools';
+import { BrushTool, RectangleTool, ViewTool, SplitTool, TrimTool, ExpandTool, ConcatTool } from '@/lib/tools';
 
 import './App.css'
 import { Toaster } from './components/ui/sonner';
@@ -46,6 +46,11 @@ function App() {
     }
   }, [appState.captionPrefix]);
 
+  const itemsRef = useRef(appState.items);
+  useEffect(() => {
+    itemsRef.current = appState.items;
+  }, [appState.items]);
+
   // Tools State
   const tools = useMemo(() => [
     new ViewTool(),
@@ -53,7 +58,8 @@ function App() {
     new RectangleTool(),
     new SplitTool(),
     new TrimTool(),
-    new ExpandTool()
+    new ExpandTool(),
+    new ConcatTool(() => itemsRef.current?.map(i => i.image) ?? [])
   ], []);
   const [activeToolId, setActiveToolId] = useState<string>(tools[0].id);
   const activeTool = tools.find(t => t.id === activeToolId)!;
@@ -135,6 +141,8 @@ function App() {
       await closeFolder();
       await refresh();
       setTimestamp(new Date().getTime());
+    } else if (op === 'batch:escape') {
+
     }
   }
 

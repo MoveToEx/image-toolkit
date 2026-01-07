@@ -1,7 +1,9 @@
 import { MouseEvent, WheelEvent, ReactNode } from 'react';
-import { Brush, Square, MousePointer2, LucideIcon, SquareSplitHorizontal, SquareSplitVertical, LayoutGrid, Crop, Maximize } from 'lucide-react';
+import { Brush, Square, MousePointer2, LucideIcon, SquareSplitHorizontal, SquareSplitVertical, LayoutGrid, Crop, Maximize, Columns } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 export type Point = { x: number; y: number };
 
@@ -721,6 +723,290 @@ export class ExpandTool extends Tool {
     ctx.strokeStyle = '#888';
     ctx.setLineDash([]);
     ctx.strokeRect(0, 0, width, height);
+
+    ctx.restore();
+  }
+}
+
+export class ConcatTool extends Tool {
+  id = 'concat';
+  name = 'Concat';
+  icon = Columns;
+
+  mode: 'horizontal' | 'vertical' = 'horizontal';
+  otherImage: string | null = null;
+  offset = 0;
+  color = '#ffffff';
+  private otherImageEl: HTMLImageElement | null = null;
+  private dragging: 'main' | 'other' | null = null;
+  private dragStart = 0;
+  private offsetStart = 0;
+
+  constructor(private getItems: () => string[]) {
+    super();
+  }
+
+  get clip() { return false; }
+
+  reset() {
+    this.mode = 'horizontal';
+    this.otherImage = null;
+    this.otherImageEl = null;
+    this.offset = 0;
+    this.color = '#ffffff';
+    this.dragging = null;
+  }
+
+  getData() {
+    if (!this.otherImage) return null;
+    return {
+      image: this.otherImage,
+      mode: this.mode,
+      offset: Math.round(this.offset),
+      color: this.color
+    };
+  }
+
+  // Helper to determine layout and smaller image
+  private getLayout(image: HTMLImageElement, other: HTMLImageElement) {
+    let mainRect = { x: 0, y: 0, w: image.width, h: image.height };
+    let otherRect = { x: 0, y: 0, w: other.width, h: other.height };
+    let smaller: 'main' | 'other' | null = null;
+    let maxOffset = 0;
+
+    if (this.mode === 'horizontal') {
+      // Horizontal concatenation
+      // Align vertically (y-axis)
+      otherRect.x = image.width;
+
+      if (image.height < other.height) {
+        smaller = 'main';
+        maxOffset = other.height - image.height;
+        mainRect.y = this.offset;
+      } else if (other.height < image.height) {
+        smaller = 'other';
+        maxOffset = image.height - other.height;
+        otherRect.y = this.offset;
+      }
+    } else {
+      // Vertical concatenation
+      // Align horizontally (x-axis)
+      otherRect.y = image.height;
+
+      if (image.width < other.width) {
+        smaller = 'main';
+        maxOffset = other.width - image.width;
+        mainRect.x = this.offset;
+      } else if (other.width < image.width) {
+        smaller = 'other';
+        maxOffset = image.width - other.width;
+        otherRect.x = this.offset;
+      }
+    }
+
+    return { mainRect, otherRect, smaller, maxOffset };
+  }
+
+  onMouseDown(event: ToolEvent<MouseEvent>, context: ToolContext) {
+    if (!context.image || !this.otherImageEl) return;
+    const { image } = context;
+    const { mainRect, otherRect, smaller } = this.getLayout(image, this.otherImageEl);
+    const { x, y } = event.imagePoint;
+
+    // Check hit
+    const hitMain = x >= mainRect.x && x < mainRect.x + mainRect.w && y >= mainRect.y && y < mainRect.y + mainRect.h;
+    const hitOther = x >= otherRect.x && x < otherRect.x + otherRect.w && y >= otherRect.y && y < otherRect.y + otherRect.h;
+
+    if (hitMain && smaller === 'main') {
+      this.dragging = 'main';
+    } else if (hitOther && smaller === 'other') {
+      this.dragging = 'other';
+    } else {
+      return;
+    }
+
+    if (this.mode === 'horizontal') {
+      this.dragStart = y;
+    } else {
+      this.dragStart = x;
+    }
+    this.offsetStart = this.offset;
+  }
+
+  onMouseMove(event: ToolEvent<MouseEvent>, context: ToolContext) {
+    if (!context.image || !this.otherImageEl) return;
+
+    // Cursor update
+    const { smaller, maxOffset } = this.getLayout(context.image, this.otherImageEl);
+    if (!this.dragging) {
+      const { mainRect, otherRect } = this.getLayout(context.image, this.otherImageEl);
+      const { x, y } = event.imagePoint;
+      const hitMain = x >= mainRect.x && x < mainRect.x + mainRect.w && y >= mainRect.y && y < mainRect.y + mainRect.h;
+      const hitOther = x >= otherRect.x && x < otherRect.x + otherRect.w && y >= otherRect.y && y < otherRect.y + otherRect.h;
+
+      if ((hitMain && smaller === 'main') || (hitOther && smaller === 'other')) {
+        context.canvas.style.cursor = 'grab';
+      } else {
+        context.canvas.style.cursor = 'default';
+      }
+      return;
+    }
+
+    context.canvas.style.cursor = 'grabbing';
+
+    let current = 0;
+    if (this.mode === 'horizontal') {
+      current = event.imagePoint.y;
+    } else {
+      current = event.imagePoint.x;
+    }
+
+    const delta = current - this.dragStart;
+    this.offset = Math.max(0, Math.min(this.offsetStart + delta, maxOffset));
+  }
+
+  onMouseUp() {
+    this.dragging = null;
+  }
+
+  onMouseLeave() {
+    this.dragging = null;
+  }
+
+  loadOtherImage(src: string, onLoad: () => void) {
+    if (!src) return;
+    const img = new Image();
+    img.src = convertFileSrc(src);
+    img.onload = () => {
+      this.otherImageEl = img;
+      onLoad();
+    };
+  }
+
+  renderOptions({ onChange }: { onChange: () => void }) {
+    const handleModeChange = (val: string) => {
+      this.mode = val as 'horizontal' | 'vertical';
+      onChange();
+    };
+
+    const handleImageChange = (val: string) => {
+      this.otherImage = val;
+      this.offset = 0; // Reset offset when image changes
+      this.loadOtherImage(val, onChange);
+    };
+
+    const items = this.getItems();
+
+    return (
+      <div className="mt-6 space-y-4">
+        <div>
+          <Label className="mb-2 block text-sm font-medium text-muted-foreground">Fill Color</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="color"
+              value={this.color}
+              onChange={(e) => {
+                this.color = e.target.value;
+                onChange();
+              }}
+              className="w-12 h-8 p-1 cursor-pointer"
+            />
+            <span className="text-xs text-muted-foreground">{this.color}</span>
+          </div>
+        </div>
+
+        <div>
+          <Label className="mb-2 block text-sm font-medium text-muted-foreground">Mode</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              className={`flex items-center justify-center p-2 rounded border text-sm ${this.mode === 'horizontal' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}`}
+              onClick={() => handleModeChange('horizontal')}
+            >
+              Horizontal
+            </button>
+            <button
+              className={`flex items-center justify-center p-2 rounded border text-sm ${this.mode === 'vertical' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}`}
+              onClick={() => handleModeChange('vertical')}
+            >
+              Vertical
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <Label className="mb-2 block text-sm font-medium text-muted-foreground">Second Image</Label>
+          <Select value={this.otherImage || ''} onValueChange={handleImageChange}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select image..." />
+            </SelectTrigger>
+            <SelectContent>
+              {items?.map((item) => {
+                const name = item.split(/[\\/]/).pop();
+                return (
+                  <SelectItem key={item} value={item}>
+                    <span className="truncate max-w-50 inline-block" title={name}>{name}</span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    );
+  }
+
+  render(context: ToolContext) {
+    const { ctx, transform, image } = context;
+    if (!image || !this.otherImageEl) return;
+    const { x, y, scale } = transform;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    const { mainRect, otherRect, smaller } = this.getLayout(image, this.otherImageEl);
+
+    if (image.width > 0 && image.height > 0) {
+      if (this.mode === 'horizontal') {
+        const totalWidth = image.width + this.otherImageEl.width;
+        const totalHeight = Math.max(image.height, this.otherImageEl.height);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(0, 0, totalWidth, totalHeight);
+      } else {
+        const totalWidth = Math.max(image.width, this.otherImageEl.width);
+        const totalHeight = image.height + this.otherImageEl.height;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(0, 0, totalWidth, totalHeight);
+      }
+    }
+
+    ctx.drawImage(image, mainRect.x, mainRect.y);
+    ctx.drawImage(this.otherImageEl, otherRect.x, otherRect.y);
+
+    // Draw outline for smaller image to indicate it's interactive
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 2 / scale;
+
+    if (smaller === 'main') {
+      ctx.strokeRect(mainRect.x, mainRect.y, mainRect.w, mainRect.h);
+    } else {
+      ctx.strokeRect(otherRect.x, otherRect.y, otherRect.w, otherRect.h);
+    }
+
+    // Draw total boundary
+    if (this.mode === 'horizontal') {
+      const totalWidth = image.width + this.otherImageEl.width;
+      const totalHeight = Math.max(image.height, this.otherImageEl.height);
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 1 / scale;
+      ctx.strokeRect(0, 0, totalWidth, totalHeight);
+    } else {
+      const totalWidth = Math.max(image.width, this.otherImageEl.width);
+      const totalHeight = image.height + this.otherImageEl.height;
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 1 / scale;
+      ctx.strokeRect(0, 0, totalWidth, totalHeight);
+    }
 
     ctx.restore();
   }
