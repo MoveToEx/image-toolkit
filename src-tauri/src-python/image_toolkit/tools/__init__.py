@@ -212,10 +212,3 @@ class ConcatTool(Tool):
             item.caption_str = ', '.join(caption)
         
         state.items.pop(other_idx)
-    
-
-class SaveArgs(_BaseModel):
-    current: str
-    tool: BrushTool | RectTool | SplitTool | TrimTool | ExpandTool | ViewTool | ConcatTool
-    caption: str
-    caption_prefix: str
