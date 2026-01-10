@@ -15,7 +15,8 @@
       {
         "title": "image-toolkit",
         "width": 1200,
-        "height": 900
+        "height": 900,
+        "dragDropEnabled": true
       }
     ],
     "security": {

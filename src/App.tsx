@@ -9,13 +9,36 @@ import FilesPanel from './components/files-panel';
 import CaptionPanel from './components/caption-panel';
 import ImagePanel from './components/image-panel';
 import { useAppState } from './lib/hooks';
+import { closeFolder, save, deleteItem, batchOperation, onDrag } from './client/apiClient';
+
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { closeFolder, save, deleteItem } from './client/apiClient';
-import { BrushTool, RectangleTool, ViewTool, SplitTool, TrimTool, ExpandTool, ConcatTool } from '@/lib/tools';
+import { listen, TauriEvent } from '@tauri-apps/api/event';
 
 import './App.css'
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
+import { BrushTool, RectangleTool, ViewTool, SplitTool, TrimTool, ExpandTool, ConcatTool } from '@/lib/tools';
+
+async function inspected<T>(func: () => Promise<T>, successMessage: string | ((val: T) => string) | null = null) {
+  let result;
+  try {
+    result = await func();
+    if (successMessage === null) { }
+    else if (typeof successMessage == 'string') {
+      toast.success(successMessage);
+    }
+    else if (typeof successMessage == 'function') {
+      toast.success(successMessage(result));
+    }
+  } catch (e) {
+    if (e instanceof Error) {
+      toast.error('Failed: ' + e.message);
+    } else {
+      toast.error('Failed: ' + String(e));
+    }
+  }
+  return result;
+}
 
 function App() {
   const { appState, select, refresh, loading } = useAppState();
@@ -64,6 +87,17 @@ function App() {
   const [activeToolId, setActiveToolId] = useState<string>(tools[0].id);
   const activeTool = tools.find(t => t.id === activeToolId)!;
 
+  useEffect(() => {
+    const promise = listen<{ paths: string[] }>(TauriEvent.DRAG_DROP, async event => {
+      await inspected(() => onDrag(event.payload.paths));
+      await refresh();
+    });
+
+    return () => {
+      promise.then(f => f());
+    }
+  }, []);
+
   const handleToolChange = (toolId: string) => {
     tools.forEach(t => t.reset());
     setActiveToolId(toolId);
@@ -85,22 +119,13 @@ function App() {
       caption: tempCaption,
       captionPrefix: tempPrefix,
     };
-    
-    let nextSelected;
-    try {
-      nextSelected = await save(data);
-      toast.success('Saved');
-    }
-    catch (e) {
-      if (e instanceof Error) {
-        toast.error('Failed: ' + e.message);
-      } else {
-        toast.error('Failed: ' + String(e).slice(0, 32));
-      }
-    }
-    finally {
-      setRunning(false);
-    }
+
+    let nextSelected = await inspected(async () => {
+      return await save(data);
+    }, 'Saved');
+
+    setRunning(false);
+
     if (nextSelected) {
       setSelected(nextSelected);
     }
@@ -113,22 +138,14 @@ function App() {
 
   const handleDelete = async (item: string) => {
     setRunning(true);
-    try {
+    await inspected(async () => {
       await deleteItem(item);
-      toast.success('Deleted');
       if (selected === item) {
         setSelected(null);
       }
       await refresh();
-    } catch (e) {
-      if (e instanceof Error) {
-        toast.error('Failed: ' + e.message);
-      } else {
-        toast.error('Failed: ' + String(e));
-      }
-    } finally {
-      setRunning(false);
-    }
+    }, 'Deleted');
+    setRunning(false);
   };
 
   const handleMenu = async (op: Operation) => {
@@ -142,7 +159,23 @@ function App() {
       await refresh();
       setTimestamp(new Date().getTime());
     } else if (op === 'batch:escape') {
-
+      setRunning(true);
+      await inspected(async () => {
+        await batchOperation({
+          op: 'escape_parentheses'
+        });
+      }, 'Saved');
+      setRunning(false);
+      await refresh();
+    } else if (op === 'batch:unescape') {
+      setRunning(true);
+      await inspected(async () => {
+        await batchOperation({
+          op: 'unescape_parentheses'
+        });
+      }, 'Saved');
+      setRunning(false);
+      await refresh();
     }
   }
 

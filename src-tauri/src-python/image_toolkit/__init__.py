@@ -1,5 +1,4 @@
 from anyio.from_thread import start_blocking_portal
-from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 from pytauri import (
     Commands,
@@ -8,12 +7,12 @@ from pytauri import (
     Manager,
     State
 )
-from tkinter import filedialog
 from pathlib import Path
 from os import getenv
-from typing import Annotated
+from typing import Annotated, Literal
+from re import sub
 
-from image_toolkit.utils import get_common_prefix, where
+from image_toolkit.utils import get_common_prefix, where, get_caption, copy
 from image_toolkit.types import _BaseModel, AppState, DatasetItem
 from image_toolkit.tools import (
     BrushTool, ConcatTool, ExpandTool, RectTool, SplitTool, TrimTool, ViewTool
@@ -76,17 +75,67 @@ async def delete_item(state: Annotated[AppState, State()], body: str) -> None:
     item.caption.unlink()
     item.image.unlink()
 
+    state.caption_prefix = get_common_prefix(map(lambda it: it.caption_str, state.items))
+
     state.items.pop(idx)
+
+class BatchOperationPayload(_BaseModel):
+    op: Literal['escape_parentheses', 'unescape_parentheses']
+
+@commands.command()
+async def batch_operation(state: Annotated[AppState, State()], body: BatchOperationPayload) -> None:
+    if body.op == 'escape_parentheses':
+        state.caption_prefix = sub(r'(?<!\\)\(', r'\(', state.caption_prefix)
+        state.caption_prefix = sub(r'(?<!\\)\)', r'\)', state.caption_prefix)
+        for it in state.items:
+            it.caption_str = sub(r'(?<!\\)\(', r'\(', it.caption_str)
+            it.caption_str = sub(r'(?<!\\)\)', r'\)', it.caption_str)
+            with open(it.caption, 'w') as f:
+                f.write(state.caption_prefix + it.caption_str)
+
+    elif body.op == 'unescape_parentheses':
+        state.caption_prefix = sub(r'\\\(', r'(', state.caption_prefix)
+        state.caption_prefix = sub(r'\\\)', r')', state.caption_prefix)
+        for it in state.items:
+            it.caption_str = sub(r'\\\(', r'(', it.caption_str)
+            it.caption_str = sub(r'\\\)', r')', it.caption_str)
+            with open(it.caption, 'w') as f:
+                f.write(state.caption_prefix + it.caption_str)
+
+@commands.command()
+async def on_drag(state: Annotated[AppState, State()], body: list[str]) -> str:
+    paths = list(map(lambda it: Path(it), body))
+
+    if len(paths) == 0:
+        raise ValueError('Payload empty')
+
+    if len(paths) == 1:
+        path = paths[0]
+
+        if path.is_dir():
+            await open_folder(state, str(path))
+
+            return 'Opened directory'
+    
+    if state.folder is None:
+        raise ValueError('No open directory')
+    
+    for it in paths:
+        target = copy(it, state.folder)
+
+        caption_out = get_caption(target)
+        caption_in = get_caption(it, False)
+
+        if caption_in is not None:
+            with open(caption_out, 'w') as out, open(caption_in, 'r') as f:
+                out.write(f.read())
+
+    return ''
 
 
 @commands.command()
-async def select_folder(state: Annotated[AppState, State()]) -> bool:
-    p = filedialog.askdirectory()
-
-    if len(p) == 0:
-        return False
-
-    p = Path(p)
+async def open_folder(state: Annotated[AppState, State()], body: str) -> None:
+    p = Path(body)
     state.folder = p
     state.caption_prefix = ''
     state.items = []
@@ -94,15 +143,8 @@ async def select_folder(state: Annotated[AppState, State()]) -> bool:
     for it in p.glob('**/*'):
         if it.suffix not in IMAGE_EXT:
             continue
-        caption_path = it.parent / (it.stem + '.txt')
-
-        if not caption_path.exists():
-            caption_path = it.parent / (it.name + '.txt')
-        if not caption_path.exists():
-            caption_path = it.parent / it.stem
-        if not caption_path.exists():
-            caption_path = it.parent / (it.stem + '.txt')
-            caption_path.touch()
+        
+        caption_path = get_caption(it)
 
         with open(caption_path) as f:
             caption = f.read()
@@ -113,13 +155,10 @@ async def select_folder(state: Annotated[AppState, State()]) -> bool:
             image=it,
         ))
 
-    state.caption_prefix = get_common_prefix(
-        map(lambda it: it.caption_str, state.items))
+    state.caption_prefix = get_common_prefix(map(lambda it: it.caption_str, state.items))
 
     for it in state.items:
         it.caption_str = it.caption_str.removeprefix(state.caption_prefix)
-
-    return True
 
 
 def main() -> int:

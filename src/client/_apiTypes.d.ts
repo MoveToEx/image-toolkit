@@ -47,7 +47,8 @@ export type Caption1 = string
 export type Captionprefix1 = string
 export type RootModelUnionStrNoneType = (string | null)
 export type RootModelStr = string
-export type RootModelBool = boolean
+export type Op = ("escape_parentheses" | "unescape_parentheses")
+export type RootModelListStr = string[]
 
 /**
  * Commands Input and Output Schemas
@@ -69,9 +70,17 @@ delete_item: {
 input: RootModelStr
 output: RootModelNoneType
 }
-select_folder: {
-input: void | undefined
-output: RootModelBool
+batch_operation: {
+input: BatchOperationPayload
+output: RootModelNoneType
+}
+on_drag: {
+input: RootModelListStr
+output: RootModelStr
+}
+open_folder: {
+input: RootModelStr
+output: RootModelNoneType
 }
 }
 export interface AppState {
@@ -141,4 +150,7 @@ mode: Mode1
 image: Image1
 offset: Offset
 color: Color3
+}
+export interface BatchOperationPayload {
+op: Op
 }

@@ -38,9 +38,23 @@ export async function deleteItem(
     return await pyInvoke("delete_item", body, options);
 }
 
-export async function selectFolder(
-    body: Commands["select_folder"]["input"],
+export async function batchOperation(
+    body: Commands["batch_operation"]["input"],
     options?: InvokeOptions
-): Promise<Commands["select_folder"]["output"]> {
-    return await pyInvoke("select_folder", body, options);
+): Promise<Commands["batch_operation"]["output"]> {
+    return await pyInvoke("batch_operation", body, options);
+}
+
+export async function onDrag(
+    body: Commands["on_drag"]["input"],
+    options?: InvokeOptions
+): Promise<Commands["on_drag"]["output"]> {
+    return await pyInvoke("on_drag", body, options);
+}
+
+export async function openFolder(
+    body: Commands["open_folder"]["input"],
+    options?: InvokeOptions
+): Promise<Commands["open_folder"]["output"]> {
+    return await pyInvoke("open_folder", body, options);
 }

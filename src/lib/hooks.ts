@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { getState, selectFolder } from "@/client/apiClient";
+import { getState, openFolder } from "@/client/apiClient";
+import { open } from '@tauri-apps/plugin-dialog';
 
 type AppState = Awaited<ReturnType<typeof getState>>;
 
@@ -20,7 +21,13 @@ export function useAppState() {
   }, []);
 
   const select = useCallback(async () => {
-    await selectFolder();
+    const file = await open({
+      multiple: false,
+      directory: true
+    });
+    if (file) {
+      await openFolder(file);
+    }
 
     await refresh();
   }, []);

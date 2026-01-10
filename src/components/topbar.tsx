@@ -41,10 +41,10 @@ export default function TopBar({
                 <Layers color='#737373' size={14} className='mr-2' /> Batch operation
               </MenubarSubTrigger>
               <MenubarSubContent>
-                <MenubarItem>
+                <MenubarItem onClick={() => onMenuClicked('batch:escape')}>
                   <SquareSlash /> Escape brackets
                 </MenubarItem>
-                <MenubarItem>
+                <MenubarItem onClick={() => onMenuClicked('batch:unescape')}>
                   <Parentheses /> Unescape brackets
                 </MenubarItem>
               </MenubarSubContent>

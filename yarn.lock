@@ -2028,6 +2028,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tauri-apps/plugin-dialog@npm:~2":
+  version: 2.4.2
+  resolution: "@tauri-apps/plugin-dialog@npm:2.4.2"
+  dependencies:
+    "@tauri-apps/api": "npm:^2.8.0"
+  checksum: 10c0/2950a5aa07727710b5395491e9b80886c13cbefd05445a84412819128e90bdaec751795c47ed39dd80fb5181c4e21ee7aaaae6152551dbf1ddc02aa3eac59b37
+  languageName: node
+  linkType: hard
+
 "@tauri-apps/plugin-opener@npm:^2":
   version: 2.5.2
   resolution: "@tauri-apps/plugin-opener@npm:2.5.2"
@@ -3094,6 +3103,7 @@ __metadata:
     "@tailwindcss/vite": "npm:^4.1.18"
     "@tauri-apps/api": "npm:^2"
     "@tauri-apps/cli": "npm:^2"
+    "@tauri-apps/plugin-dialog": "npm:~2"
     "@tauri-apps/plugin-opener": "npm:^2"
     "@types/node": "npm:^25.0.3"
     "@types/react": "npm:^19.2.7"
