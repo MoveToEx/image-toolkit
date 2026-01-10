@@ -9,7 +9,7 @@ import FilesPanel from './components/files-panel';
 import CaptionPanel from './components/caption-panel';
 import ImagePanel from './components/image-panel';
 import { useAppState } from './lib/hooks';
-import { closeFolder, save, deleteItem, batchOperation, onDrag } from './client/apiClient';
+import { closeFolder, save, deleteItem, onDrag } from './client/apiClient';
 
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen, TauriEvent } from '@tauri-apps/api/event';
@@ -18,6 +18,8 @@ import './App.css'
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import { BrushTool, RectangleTool, ViewTool, SplitTool, TrimTool, ExpandTool, ConcatTool } from '@/lib/tools';
+import { BATCH_OPERATIONS, BatchOperationDefinition } from '@/operations';
+import { Dialog, DialogContent } from './components/ui/dialog';
 
 async function inspected<T>(func: () => Promise<T>, successMessage: string | ((val: T) => string) | null = null) {
   let result;
@@ -56,6 +58,7 @@ function App() {
   const [timestamp, setTimestamp] = useState(() => new Date().getTime());
 
   const [running, setRunning] = useState(false);
+  const [pendingOperation, setPendingOperation] = useState<BatchOperationDefinition | null>(null);
 
   useEffect(() => {
     if (selectedItem) {
@@ -148,6 +151,21 @@ function App() {
     setRunning(false);
   };
 
+  const runOperation = async (op: BatchOperationDefinition, options?: any) => {
+    setRunning(true);
+    setPendingOperation(null);
+    await inspected(async () => {
+      await op.execute({
+        appState,
+        selectedItem,
+        toast
+      }, options);
+    });
+    setRunning(false);
+    await refresh();
+    setTimestamp(() => new Date().getTime());
+  };
+
   const handleMenu = async (op: Operation) => {
     if (op === 'file:open_folder') {
       await select();
@@ -158,31 +176,38 @@ function App() {
       await closeFolder();
       await refresh();
       setTimestamp(new Date().getTime());
-    } else if (op === 'batch:escape') {
-      setRunning(true);
-      await inspected(async () => {
-        await batchOperation({
-          op: 'escape_parentheses'
-        });
-      }, 'Saved');
-      setRunning(false);
-      await refresh();
-    } else if (op === 'batch:unescape') {
-      setRunning(true);
-      await inspected(async () => {
-        await batchOperation({
-          op: 'unescape_parentheses'
-        });
-      }, 'Saved');
-      setRunning(false);
-      await refresh();
+    } else if (op.startsWith('batch:')) {
+      const opId = op.split(':')[1];
+      const operation = BATCH_OPERATIONS.find(o => o.id === opId);
+      if (operation) {
+        if (operation.optionsComponent) {
+          setPendingOperation(operation);
+        } else {
+          await runOperation(operation);
+        }
+      }
     }
   }
 
   return (
     <div className='w-full h-full flex flex-col'>
       <Toaster />
-      <TopBar onMenuClicked={handleMenu} />
+      <TopBar onMenuClicked={handleMenu} batchOperations={BATCH_OPERATIONS} />
+      <Dialog open={!!pendingOperation} onOpenChange={(open) => !open && setPendingOperation(null)}>
+        <DialogContent>
+          {pendingOperation && pendingOperation.optionsComponent && (
+            <pendingOperation.optionsComponent
+              context={{
+                appState,
+                selectedItem,
+                toast
+              }}
+              onConfirm={(opts) => runOperation(pendingOperation, opts)}
+              onCancel={() => setPendingOperation(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
       <ResizablePanelGroup direction='horizontal'>
         <ResizablePanel defaultSize={20}>
           <ToolPanel

@@ -1,15 +1,17 @@
-import { CircleX, Folder, Layers, Parentheses, RefreshCcw, SquareSlash } from "lucide-react";
+import { CircleX, Folder, Layers, RefreshCcw } from "lucide-react";
 import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarSeparator, MenubarSub, MenubarSubContent, MenubarSubTrigger, MenubarTrigger } from "./ui/menubar";
+import { BatchOperationDefinition } from "@/operations";
 
 type FileOperation = 'open_folder' | 'close' | 'refresh';
-type BatchOperation = 'escape' | 'unescape';
 
-export type Operation = `file:${FileOperation}` | `batch:${BatchOperation}`
+export type Operation = `file:${FileOperation}` | `batch:${string}`
 
 export default function TopBar({
   onMenuClicked,
+  batchOperations = []
 }: {
   onMenuClicked: (e: Operation) => void,
+  batchOperations?: BatchOperationDefinition[]
 }) {
   return (
     <div className='w-full'>
@@ -41,12 +43,11 @@ export default function TopBar({
                 <Layers color='#737373' size={14} className='mr-2' /> Batch operation
               </MenubarSubTrigger>
               <MenubarSubContent>
-                <MenubarItem onClick={() => onMenuClicked('batch:escape')}>
-                  <SquareSlash /> Escape brackets
-                </MenubarItem>
-                <MenubarItem onClick={() => onMenuClicked('batch:unescape')}>
-                  <Parentheses /> Unescape brackets
-                </MenubarItem>
+                {batchOperations.map(op => (
+                  <MenubarItem key={op.id} onClick={() => onMenuClicked(`batch:${op.id}`)}>
+                    {op.icon && <op.icon />} {op.label}
+                  </MenubarItem>
+                ))}
               </MenubarSubContent>
             </MenubarSub>
           </MenubarContent>

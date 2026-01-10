@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { getState, openFolder } from "@/client/apiClient";
 import { open } from '@tauri-apps/plugin-dialog';
 
-type AppState = Awaited<ReturnType<typeof getState>>;
+export type AppState = Awaited<ReturnType<typeof getState>>;
 
 export function useAppState() {
   const [appState, setAppState] = useState<AppState>({});

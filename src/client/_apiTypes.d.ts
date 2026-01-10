@@ -47,7 +47,14 @@ export type Caption1 = string
 export type Captionprefix1 = string
 export type RootModelUnionStrNoneType = (string | null)
 export type RootModelStr = string
-export type Op = ("escape_parentheses" | "unescape_parentheses")
+export type RootModelBatchOperationPayload = (EscapeOperation | UnescapeOperation | AlignResolutionOperation)
+export type Id7 = "escape_parentheses"
+export type Id8 = "unescape_parentheses"
+export type Id9 = "align_resolution"
+export type Width1 = number
+export type Height = number
+export type Color4 = string
+export type Position = ("top-left" | "top-center" | "top-right" | "center-left" | "center" | "center-right" | "bottom-left" | "bottom-center" | "bottom-right")
 export type RootModelListStr = string[]
 
 /**
@@ -71,7 +78,7 @@ input: RootModelStr
 output: RootModelNoneType
 }
 batch_operation: {
-input: BatchOperationPayload
+input: RootModelBatchOperationPayload
 output: RootModelNoneType
 }
 on_drag: {
@@ -151,6 +158,16 @@ image: Image1
 offset: Offset
 color: Color3
 }
-export interface BatchOperationPayload {
-op: Op
+export interface EscapeOperation {
+id: Id7
+}
+export interface UnescapeOperation {
+id: Id8
+}
+export interface AlignResolutionOperation {
+id: Id9
+width: Width1
+height: Height
+color: Color4
+position: Position
 }

@@ -10,12 +10,14 @@ from pytauri import (
 from pathlib import Path
 from os import getenv
 from typing import Annotated, Literal
-from re import sub
 
 from image_toolkit.utils import get_common_prefix, where, get_caption, copy
 from image_toolkit.types import _BaseModel, AppState, DatasetItem
 from image_toolkit.tools import (
     BrushTool, ConcatTool, ExpandTool, RectTool, SplitTool, TrimTool, ViewTool
+)
+from image_toolkit.batch_operations import (
+    EscapeOperation, UnescapeOperation, AlignResolutionOperation
 )
 
 PYTAURI_GEN_TS = getenv("PYTAURI_GEN_TS") != "0"
@@ -79,28 +81,11 @@ async def delete_item(state: Annotated[AppState, State()], body: str) -> None:
 
     state.items.pop(idx)
 
-class BatchOperationPayload(_BaseModel):
-    op: Literal['escape_parentheses', 'unescape_parentheses']
+type BatchOperationPayload = EscapeOperation | UnescapeOperation | AlignResolutionOperation
 
 @commands.command()
 async def batch_operation(state: Annotated[AppState, State()], body: BatchOperationPayload) -> None:
-    if body.op == 'escape_parentheses':
-        state.caption_prefix = sub(r'(?<!\\)\(', r'\(', state.caption_prefix)
-        state.caption_prefix = sub(r'(?<!\\)\)', r'\)', state.caption_prefix)
-        for it in state.items:
-            it.caption_str = sub(r'(?<!\\)\(', r'\(', it.caption_str)
-            it.caption_str = sub(r'(?<!\\)\)', r'\)', it.caption_str)
-            with open(it.caption, 'w') as f:
-                f.write(state.caption_prefix + it.caption_str)
-
-    elif body.op == 'unescape_parentheses':
-        state.caption_prefix = sub(r'\\\(', r'(', state.caption_prefix)
-        state.caption_prefix = sub(r'\\\)', r')', state.caption_prefix)
-        for it in state.items:
-            it.caption_str = sub(r'\\\(', r'(', it.caption_str)
-            it.caption_str = sub(r'\\\)', r')', it.caption_str)
-            with open(it.caption, 'w') as f:
-                f.write(state.caption_prefix + it.caption_str)
+    return body.run(state)
 
 @commands.command()
 async def on_drag(state: Annotated[AppState, State()], body: list[str]) -> str:
