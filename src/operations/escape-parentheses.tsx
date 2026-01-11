@@ -2,7 +2,7 @@ import { SquareSlash } from "lucide-react";
 import { BatchOperationDefinition } from "./types";
 import { batchOperation } from "@/client/apiClient";
 
-export const EscapeParenthesesOperation: BatchOperationDefinition = {
+export const EscapeParenthesesOperation: BatchOperationDefinition<void> = {
   id: 'escape_parentheses',
   label: 'Escape brackets',
   icon: SquareSlash,

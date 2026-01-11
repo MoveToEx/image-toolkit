@@ -54,6 +54,7 @@ export type Id9 = "align_resolution"
 export type Width1 = number
 export type Height = number
 export type Color4 = string
+export type Boxtag = boolean
 export type Position = ("top-left" | "top-center" | "top-right" | "center-left" | "center" | "center-right" | "bottom-left" | "bottom-center" | "bottom-right")
 export type RootModelListStr = string[]
 
@@ -169,5 +170,6 @@ id: Id9
 width: Width1
 height: Height
 color: Color4
+boxTag: Boxtag
 position: Position
 }

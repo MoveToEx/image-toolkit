@@ -11,7 +11,7 @@ export interface BatchOperationContext {
   toast: typeof toast;
 }
 
-export interface BatchOperationDefinition {
+export interface BatchOperationDefinition<T = void> {
   id: string;
   label: string;
   icon?: LucideIcon;
@@ -20,12 +20,12 @@ export interface BatchOperationDefinition {
   // If defined, this component will be shown in a dialog.
   // When the user confirms, the execute method is called with the result.
   optionsComponent?: React.ComponentType<{
-     onConfirm: (options: any) => void;
+     onConfirm: (options: T) => void;
      onCancel: () => void;
      context: BatchOperationContext;
   }>;
   
   // existing operations (escape/unescape) handle their own loading state / wrapper if needed, 
   // but typically the runner (App.tsx) handles the top loading state.
-  execute: (context: BatchOperationContext, options?: any) => Promise<void>;
+  execute: (context: BatchOperationContext, options: T) => Promise<void>;
 }

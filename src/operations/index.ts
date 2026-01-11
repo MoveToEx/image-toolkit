@@ -5,7 +5,7 @@ import { ResolutionAlignmentOperation } from "./resolution-alignment";
 
 export type { BatchOperationDefinition, BatchOperationContext } from "./types";
 
-export const BATCH_OPERATIONS: BatchOperationDefinition[] = [
+export const BATCH_OPERATIONS: BatchOperationDefinition<any>[] = [
   EscapeParenthesesOperation,
   UnescapeParenthesesOperation,
   ResolutionAlignmentOperation

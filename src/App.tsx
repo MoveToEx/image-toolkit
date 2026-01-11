@@ -19,7 +19,7 @@ import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import { BrushTool, RectangleTool, ViewTool, SplitTool, TrimTool, ExpandTool, ConcatTool } from '@/lib/tools';
 import { BATCH_OPERATIONS, BatchOperationDefinition } from '@/operations';
-import { Dialog, DialogContent } from './components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog';
 
 async function inspected<T>(func: () => Promise<T>, successMessage: string | ((val: T) => string) | null = null) {
   let result;
@@ -58,7 +58,7 @@ function App() {
   const [timestamp, setTimestamp] = useState(() => new Date().getTime());
 
   const [running, setRunning] = useState(false);
-  const [pendingOperation, setPendingOperation] = useState<BatchOperationDefinition | null>(null);
+  const [pendingOperation, setPendingOperation] = useState<BatchOperationDefinition<unknown> | null>(null);
 
   useEffect(() => {
     if (selectedItem) {
@@ -151,7 +151,7 @@ function App() {
     setRunning(false);
   };
 
-  const runOperation = async (op: BatchOperationDefinition, options?: any) => {
+  const runOperation = async (op: BatchOperationDefinition<unknown>, options?: unknown) => {
     setRunning(true);
     setPendingOperation(null);
     await inspected(async () => {
@@ -195,6 +195,9 @@ function App() {
       <TopBar onMenuClicked={handleMenu} batchOperations={BATCH_OPERATIONS} />
       <Dialog open={!!pendingOperation} onOpenChange={(open) => !open && setPendingOperation(null)}>
         <DialogContent>
+          <DialogTitle>
+            Apply {pendingOperation?.id}
+          </DialogTitle>
           {pendingOperation && pendingOperation.optionsComponent && (
             <pendingOperation.optionsComponent
               context={{

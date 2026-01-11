@@ -43,6 +43,7 @@ class AlignResolutionOperation(Operation):
     width: int
     height: int
     color: str
+    box_tag: bool
     position: Literal['top-left', 'top-center', 'top-right', 'center-left',
                       'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
     
@@ -53,16 +54,27 @@ class AlignResolutionOperation(Operation):
             result = bg.copy()
             img = Image.open(it.image)
             width, height = img.size
-            ratio = 1.0
-
-            if width > height:
-                ratio = self.width / width
-            else:
-                ratio = self.height / height
+            ratio = min(self.width / width, self.height / height)
             
             img = img.resize((int(width * ratio), int(height * ratio)), Image.Resampling.LANCZOS)
             width, height = img.size
 
+            tags = seq((state.caption_prefix + it.caption_str).split(',')).map(lambda i: i.strip()).to_list()
+            modified = False
+
+            if abs(width - self.width) > abs(height - self.height) and self.box_tag:
+                if 'pillarboxed' not in tags:
+                    it.caption_str = ', '.join(tags) + ', pillarboxed'
+                    modified = True
+            if abs(height - self.height) > abs(width - self.width) and self.box_tag:
+                if 'letterboxed' not in tags:
+                    it.caption_str = ', '.join(tags) + ', letterboxed'
+                    modified = True
+
+            if modified:
+                with open(it.caption, 'w') as f:
+                    f.write(it.caption_str)
+            
             left, top = 0, 0
 
             if self.position.startswith('top-'):
@@ -72,12 +84,15 @@ class AlignResolutionOperation(Operation):
             elif self.position.startswith('bottom-'):
                 top = self.height - height
             
-            if self.position.endswith('left'):
+            if self.position.endswith('-left'):
                 left = 0
-            elif self.position.endswith('center'):
+            elif self.position.endswith('-center'):
                 left = (self.width - width) // 2
-            elif self.position.endswith('right'):
+            elif self.position.endswith('-right'):
                 left = (self.width - width)
+
+            if self.position == 'center':
+                top, left = (self.height - height) // 2, (self.width - width) // 2
 
             result.paste(img, (left, top))
             result.save(it.image)
