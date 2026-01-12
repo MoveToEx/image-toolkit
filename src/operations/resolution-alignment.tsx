@@ -217,7 +217,7 @@ function ResolutionAlignmentOptions({ onConfirm, onCancel, context }: Resolution
 
 export const ResolutionAlignmentOperation: BatchOperationDefinition<ResolutionAlignmentPayload> = {
   id: 'resolution_alignment',
-  label: 'Align Resolution',
+  label: 'Align resolution',
   icon: LayoutTemplate,
   optionsComponent: ResolutionAlignmentOptions,
   execute: async (context, options) => {

@@ -47,7 +47,7 @@ export type Caption1 = string
 export type Captionprefix1 = string
 export type RootModelUnionStrNoneType = (string | null)
 export type RootModelStr = string
-export type RootModelBatchOperationPayload = (EscapeOperation | UnescapeOperation | AlignResolutionOperation)
+export type RootModelBatchOperationPayload = (EscapeOperation | UnescapeOperation | AlignResolutionOperation | DeduplicateTagsOperation | ReplaceTagsOperation | RemoveTagsOperation | RemoveTransparencyOperation)
 export type Id7 = "escape_parentheses"
 export type Id8 = "unescape_parentheses"
 export type Id9 = "align_resolution"
@@ -56,6 +56,14 @@ export type Height = number
 export type Color4 = string
 export type Boxtag = boolean
 export type Position = ("top-left" | "top-center" | "top-right" | "center-left" | "center" | "center-right" | "bottom-left" | "bottom-center" | "bottom-right")
+export type Id10 = "deduplicate_tags"
+export type Id11 = "replace_tags"
+export type Find = string
+export type Replace = string
+export type Id12 = "remove_tags"
+export type Tags = string[]
+export type Id13 = "remove_transparency"
+export type Color5 = string
 export type RootModelListStr = string[]
 
 /**
@@ -172,4 +180,20 @@ height: Height
 color: Color4
 boxTag: Boxtag
 position: Position
+}
+export interface DeduplicateTagsOperation {
+id: Id10
+}
+export interface ReplaceTagsOperation {
+id: Id11
+find: Find
+replace: Replace
+}
+export interface RemoveTagsOperation {
+id: Id12
+tags: Tags
+}
+export interface RemoveTransparencyOperation {
+id: Id13
+color: Color5
 }

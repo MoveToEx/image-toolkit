@@ -9,7 +9,7 @@ from pytauri import (
 )
 from pathlib import Path
 from os import getenv
-from typing import Annotated, Literal
+from typing import Annotated
 
 from image_toolkit.utils import get_common_prefix, where, get_caption, copy
 from image_toolkit.types import _BaseModel, AppState, DatasetItem
@@ -17,7 +17,8 @@ from image_toolkit.tools import (
     BrushTool, ConcatTool, ExpandTool, RectTool, SplitTool, TrimTool, ViewTool
 )
 from image_toolkit.batch_operations import (
-    EscapeOperation, UnescapeOperation, AlignResolutionOperation
+    EscapeOperation, UnescapeOperation, AlignResolutionOperation, DeduplicateTagsOperation, ReplaceTagsOperation,
+    RemoveTagsOperation, RemoveTransparencyOperation
 )
 
 PYTAURI_GEN_TS = getenv("PYTAURI_GEN_TS") != "0"
@@ -81,11 +82,18 @@ async def delete_item(state: Annotated[AppState, State()], body: str) -> None:
 
     state.items.pop(idx)
 
-type BatchOperationPayload = EscapeOperation | UnescapeOperation | AlignResolutionOperation
+type BatchOperationPayload = (
+    EscapeOperation | UnescapeOperation | AlignResolutionOperation |
+    DeduplicateTagsOperation | ReplaceTagsOperation | RemoveTagsOperation |
+    RemoveTransparencyOperation
+)
 
 @commands.command()
 async def batch_operation(state: Annotated[AppState, State()], body: BatchOperationPayload) -> None:
-    return body.run(state)
+    if state.folder is None:
+        return
+    
+    body.run(state)
 
 @commands.command()
 async def on_drag(state: Annotated[AppState, State()], body: list[str]) -> str:

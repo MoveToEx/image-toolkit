@@ -1,7 +1,7 @@
 from typing import Literal
 from PIL import Image
 from functional import seq
-from re import sub
+from re import sub, match as rmatch
 
 from image_toolkit.types import _BaseModel, AppState
 from image_toolkit.utils import where
@@ -36,6 +36,78 @@ class UnescapeOperation(Operation):
             it.caption_str = sub(r'\\\)', r')', it.caption_str)
             with open(it.caption, 'w') as f:
                 f.write(state.caption_prefix + it.caption_str)
+
+class DeduplicateTagsOperation(Operation):
+    id: Literal['deduplicate_tags']
+
+    def run(self, state):
+        prefix_tags = seq(state.caption_prefix.split(',')).map(lambda x: x.strip()).to_set()
+        for it in state.items:
+            tags = seq(it.caption_str.split(',')).map(lambda x: x.strip()).to_list()
+            result = []
+            for tag in tags:
+                if tag not in result and tag not in prefix_tags:
+                    result.append(tag)
+            s = ', '.join(result)
+
+            if s != it.caption_str:
+                with open(it.caption, 'w') as f:
+                    f.write(state.caption_prefix + s)
+                it.caption_str = s
+
+class ReplaceTagsOperation(Operation):
+    id: Literal['replace_tags']
+    find: str
+    replace: str
+
+    def run(self, state):
+        for it in state.items:
+            tags = seq(it.caption_str.split(',')).map(lambda x: x.strip()).to_list()
+            result = []
+            for tag in tags:
+                if tag == self.find:
+                    if len(self.replace) == 0:
+                        continue
+                    else:
+                        result.append(self.replace)
+                else:
+                    result.append(tag)
+            s = ', '.join(result)
+            
+            if s != it.caption_str:
+                with open(it.caption, 'w') as f:
+                    f.write(state.caption_prefix + s)
+                it.caption_str = s
+    
+class RemoveTagsOperation(Operation):
+    id: Literal['remove_tags']
+    tags: list[str]
+
+    def run(self, state):
+        for it in state.items:
+            tags = seq(it.caption_str.split(',')).map(lambda x: x.strip()).to_list()
+            result = []
+
+            for tag in tags:
+                rm = False
+
+                for pattern in self.tags:
+                    if pattern.startswith('^') and pattern.endswith('$'):
+                        if rmatch(pattern, tag):
+                            rm = True
+                            break
+                    else:
+                        if pattern == tag:
+                            rm = True
+                            break
+                if not rm:
+                    result.append(tag)
+
+            s = ', '.join(result)
+            if s != it.caption_str:
+                with open(it.caption, 'w') as f:
+                    f.write(state.caption_prefix + s)
+                it.caption_str = s
 
 
 class AlignResolutionOperation(Operation):
@@ -97,6 +169,19 @@ class AlignResolutionOperation(Operation):
             result.paste(img, (left, top))
             result.save(it.image)
 
+class RemoveTransparencyOperation(Operation):
+    id: Literal['remove_transparency']
+    color: str
 
+    def run(self, state):
+        for it in state.items:
+            img = Image.open(it.image)
+            
+            if not img.has_transparency_data:
+                continue
 
+            result = Image.new(img.mode, img.size, self.color)
 
+            result.alpha_composite(img)
+
+            result.save(it.image)

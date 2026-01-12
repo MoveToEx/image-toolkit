@@ -19,7 +19,31 @@ import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import { BrushTool, RectangleTool, ViewTool, SplitTool, TrimTool, ExpandTool, ConcatTool } from '@/lib/tools';
 import { BATCH_OPERATIONS, BatchOperationDefinition } from '@/operations';
-import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './components/ui/dialog';
+
+function DefaultConfirmDialog({
+  operation,
+  onConfirm,
+  onCancel
+}: {
+  operation: BatchOperationDefinition<unknown>,
+  onConfirm: () => void,
+  onCancel: () => void
+}) {
+  return (
+    <>
+      <DialogHeader>
+        <DialogDescription>
+          Are you sure you want to execute {operation.label}?
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter>
+        <Button variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button onClick={onConfirm}>Confirm</Button>
+      </DialogFooter>
+    </>
+  );
+}
 
 async function inspected<T>(func: () => Promise<T>, successMessage: string | ((val: T) => string) | null = null) {
   let result;
@@ -180,11 +204,7 @@ function App() {
       const opId = op.split(':')[1];
       const operation = BATCH_OPERATIONS.find(o => o.id === opId);
       if (operation) {
-        if (operation.optionsComponent) {
-          setPendingOperation(operation);
-        } else {
-          await runOperation(operation);
-        }
+        setPendingOperation(operation);
       }
     }
   }
@@ -196,18 +216,26 @@ function App() {
       <Dialog open={!!pendingOperation} onOpenChange={(open) => !open && setPendingOperation(null)}>
         <DialogContent>
           <DialogTitle>
-            Apply {pendingOperation?.id}
+            Apply {pendingOperation?.label}
           </DialogTitle>
-          {pendingOperation && pendingOperation.optionsComponent && (
-            <pendingOperation.optionsComponent
-              context={{
-                appState,
-                selectedItem,
-                toast
-              }}
-              onConfirm={(opts) => runOperation(pendingOperation, opts)}
-              onCancel={() => setPendingOperation(null)}
-            />
+          {pendingOperation && (
+            pendingOperation.optionsComponent ? (
+              <pendingOperation.optionsComponent
+                context={{
+                  appState,
+                  selectedItem,
+                  toast
+                }}
+                onConfirm={(opts) => runOperation(pendingOperation, opts)}
+                onCancel={() => setPendingOperation(null)}
+              />
+            ) : (
+              <DefaultConfirmDialog
+                operation={pendingOperation}
+                onConfirm={() => runOperation(pendingOperation, {})}
+                onCancel={() => setPendingOperation(null)}
+              />
+            )
           )}
         </DialogContent>
       </Dialog>
