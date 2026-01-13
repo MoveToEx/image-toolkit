@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { Tool, ToolEvent, ViewTransform, ToolContext } from '@/lib/tools';
 import { convertFileSrc } from '@tauri-apps/api/core';
 
@@ -38,7 +38,7 @@ export default function ImagePanel<S, O>({ src, activeTool, toolState, onToolSta
     const img = new Image();
     // Simple check to see if conversion is needed (if it's a file path)
     const url = (src.includes('://') || src.startsWith('data:')) ? src : convertFileSrc(src);
-    
+
     img.onload = () => {
       imageRef.current = img;
       // Center image logic
@@ -56,6 +56,64 @@ export default function ImagePanel<S, O>({ src, activeTool, toolState, onToolSta
     img.src = url;
   }, [src]);
 
+  // Draw Function
+  const render = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const transform = transformRef.current;
+    const tool = activeToolRef.current;
+    const tState = toolStateRef.current;
+
+    // Clear
+    ctx.fillStyle = '#c3c3c3'; // Dark bg matches theme usually
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const toolContext: ToolContext = {
+      ctx,
+      transform,
+      image: imageRef.current,
+      canvas
+    };
+
+    // Draw Image
+    if (imageRef.current) {
+      ctx.save();
+      ctx.translate(transform.x, transform.y);
+      ctx.scale(transform.scale, transform.scale);
+
+      // Draw image placeholder pattern or just image?
+      // Basic image draw
+      ctx.drawImage(imageRef.current, 0, 0);
+
+      ctx.restore();
+
+      // Clip for tool rendering? (Some tools might draw outside?)
+      // The base class has `clip` getter
+      if (tool.clip) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(
+          transform.x,
+          transform.y,
+          imageRef.current.width * transform.scale,
+          imageRef.current.height * transform.scale
+        );
+        ctx.clip();
+      }
+    }
+
+    // Render Tool
+    // We pass the current tool state
+    tool.render(tState, toolContext);
+
+    if (imageRef.current && tool.clip) {
+      ctx.restore();
+    }
+  }, []); // Logic relies on refs, so deps can be empty or technically refs never change
+
   // Resize Observer
   useEffect(() => {
     const container = containerRef.current;
@@ -67,6 +125,8 @@ export default function ImagePanel<S, O>({ src, activeTool, toolState, onToolSta
         const { width, height } = entry.contentRect;
         canvas.width = width;
         canvas.height = height;
+        // Trigger synchronous redraw to prevent blinking
+        render();
       }
     });
 
@@ -79,183 +139,129 @@ export default function ImagePanel<S, O>({ src, activeTool, toolState, onToolSta
       resizeObserver.disconnect();
       canvas.removeEventListener('wheel', preventDefault);
     };
-  }, []);
+  }, [render]);
 
   // Render Loop
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
     let animationFrameId: number;
 
-    const render = () => {
-      const transform = transformRef.current;
-      const tool = activeToolRef.current;
-      const tState = toolStateRef.current;
-
-      // Clear
-      ctx.fillStyle = '#c3c3c3'; // Dark bg matches theme usually
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      const toolContext: ToolContext = {
-        ctx,
-        transform,
-        image: imageRef.current,
-        canvas
-      };
-
-      // Draw Image
-      if (imageRef.current) {
-        ctx.save();
-        ctx.translate(transform.x, transform.y);
-        ctx.scale(transform.scale, transform.scale);
-
-        // Draw image placeholder pattern or just image?
-        // Basic image draw
-        ctx.drawImage(imageRef.current, 0, 0);
-
-        ctx.restore();
-
-        // Clip for tool rendering? (Some tools might draw outside?)
-        // The base class has `clip` getter
-        if (tool.clip) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(
-            transform.x,
-            transform.y,
-            imageRef.current.width * transform.scale,
-            imageRef.current.height * transform.scale
-          );
-          ctx.clip();
-        }
-      }
-
-      // Render Tool
-      // We pass the current tool state
-      tool.render(tState, toolContext);
-
-      if (imageRef.current && tool.clip) {
-        ctx.restore();
-      }
-
-      animationFrameId = requestAnimationFrame(render);
+    const loop = () => {
+      render();
+      animationFrameId = requestAnimationFrame(loop);
     };
 
-    render();
+    loop();
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, []); // Empty deps, refs handle updates
+  }, [render]);
 
   // Interaction Handlers
   const isPanning = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
 
-  const getEventData = (e: React.PointerEvent | React.WheelEvent): { imagePoint: {x: number, y: number}, viewPoint: {x: number, y: number} } => {
+  const getEventData = (e: React.PointerEvent | React.WheelEvent): { imagePoint: { x: number, y: number }, viewPoint: { x: number, y: number } } => {
     const rect = canvasRef.current!.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     const t = transformRef.current;
     return {
-        viewPoint: { x, y },
-        imagePoint: {
-            x: (x - t.x) / t.scale,
-            y: (y - t.y) / t.scale
-        }
+      viewPoint: { x, y },
+      imagePoint: {
+        x: (x - t.x) / t.scale,
+        y: (y - t.y) / t.scale
+      }
     };
   };
 
   const dispatchToolEvent = (e: React.PointerEvent | React.WheelEvent, type: ToolEvent['type']) => {
-      if (!canvasRef.current || !activeToolRef.current) return;
-      
-      const { imagePoint, viewPoint } = getEventData(e);
-      // Construct the ToolEvent with the specific type.
-      // We cast originalEvent to any because ToolEvent defines it as MouseEvent | WheelEvent 
-      // but we are now using PointerEvent which is compatible/superior.
-      const event: ToolEvent = {
-          type,
-          originalEvent: e as any, 
-          imagePoint,
-          viewPoint
-      };
+    if (!canvasRef.current || !activeToolRef.current) return;
 
-      const ctx = canvasRef.current.getContext('2d')!;
-      const context: ToolContext = {
-          ctx,
-          transform: transformRef.current,
-          image: imageRef.current,
-          canvas: canvasRef.current
-      };
+    const { imagePoint, viewPoint } = getEventData(e);
+    // Construct the ToolEvent with the specific type.
+    // We cast originalEvent to any because ToolEvent defines it as MouseEvent | WheelEvent 
+    // but we are now using PointerEvent which is compatible/superior.
+    const event: ToolEvent = {
+      type,
+      originalEvent: e as any,
+      imagePoint,
+      viewPoint
+    };
 
-      const newState = activeToolRef.current.reduce(toolStateRef.current, event, context);
-      if (newState !== toolStateRef.current) {
-          onToolStateChange(newState);
-      }
+    const ctx = canvasRef.current.getContext('2d')!;
+    const context: ToolContext = {
+      ctx,
+      transform: transformRef.current,
+      image: imageRef.current,
+      canvas: canvasRef.current
+    };
+
+    const newState = activeToolRef.current.reduce(toolStateRef.current, event, context);
+    if (newState !== toolStateRef.current) {
+      onToolStateChange(newState);
+    }
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
-      // Capture pointer to ensure we get events outside canvas
-      if (canvasRef.current) {
-          canvasRef.current.setPointerCapture(e.pointerId);
-      }
+    // Capture pointer to ensure we get events outside canvas
+    if (canvasRef.current) {
+      canvasRef.current.setPointerCapture(e.pointerId);
+    }
 
-      // Pan Condition: Middle Mouse OR (Left Mouse AND (Alt Key OR Tool is View))
-      const isViewTool = activeToolRef.current.id === 'view';
-      if (e.button === 1 || (e.button === 0 && (e.altKey || isViewTool))) {
-          isPanning.current = true;
-          lastMousePos.current = { x: e.clientX, y: e.clientY };
-          if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
-          return;
-      }
-      
-      // Otherwise Dispatch
-      dispatchToolEvent(e, 'mousedown');
+    // Pan Condition: Middle Mouse OR (Left Mouse AND (Alt Key OR Tool is View))
+    const isViewTool = activeToolRef.current.id === 'view';
+    if (e.button === 1 || (e.button === 0 && (e.altKey || isViewTool))) {
+      isPanning.current = true;
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
+      if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
+      return;
+    }
+
+    // Otherwise Dispatch
+    dispatchToolEvent(e, 'mousedown');
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-      if (isPanning.current) {
-          const dx = e.clientX - lastMousePos.current.x;
-          const dy = e.clientY - lastMousePos.current.y;
-          lastMousePos.current = { x: e.clientX, y: e.clientY };
-          
-          transformRef.current = {
-              ...transformRef.current,
-              x: transformRef.current.x + dx,
-              y: transformRef.current.y + dy
-          };
-          return;
-      }
-      
-      dispatchToolEvent(e, 'mousemove');
+    if (isPanning.current) {
+      const dx = e.clientX - lastMousePos.current.x;
+      const dy = e.clientY - lastMousePos.current.y;
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
+
+      transformRef.current = {
+        ...transformRef.current,
+        x: transformRef.current.x + dx,
+        y: transformRef.current.y + dy
+      };
+      return;
+    }
+
+    dispatchToolEvent(e, 'mousemove');
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-      if (canvasRef.current) {
-          canvasRef.current.releasePointerCapture(e.pointerId);
-      }
+    if (canvasRef.current) {
+      canvasRef.current.releasePointerCapture(e.pointerId);
+    }
 
-      if (isPanning.current) {
-          isPanning.current = false;
-          // Revert cursor? 
-          // We don't strictly set 'default' because the tool might want to set its own cursor in the next move/reduce
-          // But for panning exit, default is safe-ish. 
-          // Ideally we trigger a mousemove or let the tool loop handle it, 
-          // but tools only update cursor on event.
-          if (canvasRef.current) canvasRef.current.style.cursor = 'default';
-          return;
-      }
-      dispatchToolEvent(e, 'mouseup');
+    if (isPanning.current) {
+      isPanning.current = false;
+      // Revert cursor? 
+      // We don't strictly set 'default' because the tool might want to set its own cursor in the next move/reduce
+      // But for panning exit, default is safe-ish. 
+      // Ideally we trigger a mousemove or let the tool loop handle it, 
+      // but tools only update cursor on event.
+      if (canvasRef.current) canvasRef.current.style.cursor = 'default';
+      return;
+    }
+    dispatchToolEvent(e, 'mouseup');
   };
 
   const handlePointerLeave = (e: React.PointerEvent) => {
-      // With pointer capture, this mainly happens if capture is lost or legitimate exit without down
-      if (isPanning.current) {
-          isPanning.current = false;
-          if (canvasRef.current) canvasRef.current.style.cursor = 'default';
-      }
-      dispatchToolEvent(e, 'mouseleave');
+    // With pointer capture, this mainly happens if capture is lost or legitimate exit without down
+    if (isPanning.current) {
+      isPanning.current = false;
+      if (canvasRef.current) canvasRef.current.style.cursor = 'default';
+    }
+    dispatchToolEvent(e, 'mouseleave');
   };
 
   const handleWheel = (e: React.WheelEvent) => {
