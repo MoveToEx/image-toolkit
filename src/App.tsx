@@ -101,7 +101,8 @@ function App() {
     itemsRef.current = appState.items;
   }, [appState.items]);
 
-  // Tools State
+  // Tools Definitions
+  // ConcatTool needs items list, passed via function to access current REF
   const tools = useMemo(() => [
     new ViewTool(),
     new BrushTool(),
@@ -111,8 +112,13 @@ function App() {
     new ExpandTool(),
     new ConcatTool(() => itemsRef.current?.map(i => i.image) ?? [])
   ], []);
+
+  // Tool State
   const [activeToolId, setActiveToolId] = useState<string>(tools[0].id);
-  const activeTool = tools.find(t => t.id === activeToolId)!;
+  const activeTool = tools.find(t => t.id === activeToolId) || tools[0];
+
+  // NOTE: Initial state must be valid for the first tool
+  const [toolState, setToolState] = useState<any>(() => activeTool.init());
 
   useEffect(() => {
     const promise = listen<{ paths: string[] }>(TauriEvent.DRAG_DROP, async event => {
@@ -125,22 +131,27 @@ function App() {
     }
   }, []);
 
-  const handleToolChange = (toolId: string) => {
-    tools.forEach(t => t.reset());
-    setActiveToolId(toolId);
+  const handleToolChange = (toolId: string, options?: any) => {
+    const tool = tools.find(t => t.id === toolId);
+    if (tool) {
+      setActiveToolId(toolId);
+      setToolState(tool.init(options));
+    }
   };
 
   const handleReset = () => {
-    activeTool.reset();
+    // Reset state of current tool
+    setToolState(activeTool.init());
   };
 
   const handleSave = async () => {
     setRunning(true);
 
+    const toolData = activeTool.getData(toolState);
     const data = {
       tool: {
         id: activeTool.id,
-        ...activeTool.getData()
+        ...toolData
       },
       current: selectedItem!.image,
       caption: tempCaption,
@@ -157,7 +168,9 @@ function App() {
       setSelected(nextSelected);
     }
     await refresh();
-    activeTool.reset();
+
+    // Reset tool state after save
+    setToolState(activeTool.init());
     setTimestamp(new Date().getTime());
 
     console.log('Serialized Data:', JSON.stringify(data, null, 2));
@@ -245,6 +258,8 @@ function App() {
             tools={tools}
             activeToolId={activeToolId}
             onToolChange={handleToolChange}
+            toolState={toolState}
+            onToolStateChange={setToolState}
             onReset={handleReset}
             onSave={handleSave}
             running={running || loading}
@@ -280,6 +295,8 @@ function App() {
                 <ImagePanel
                   src={convertFileSrc(selectedItem.image) + `?_=${timestamp}`}
                   activeTool={activeTool}
+                  toolState={toolState}
+                  onToolStateChange={setToolState}
                 />
               )}
             </ResizablePanel>
@@ -303,6 +320,10 @@ function App() {
           <FilesPanel
             items={appState.items?.map(val => val.image) ?? []}
             onSelect={val => {
+              // Explicitly reset tool when image changes to avoid stale state from previous image dimensions
+              // But 'View' tool might need to persist? 
+              // Usually switching image resets drawing tools.
+              // handleReset() calls activeTool.init().
               handleReset();
               setSelected(val);
             }}

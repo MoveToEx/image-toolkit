@@ -4,7 +4,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { Save, RotateCcw } from 'lucide-react';
-import { useState } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,9 +13,11 @@ import {
 import { Spinner } from './ui/spinner';
 
 interface ToolPanelProps {
-  tools: Tool[];
+  tools: Tool<any, any>[];
   activeToolId: string;
-  onToolChange: (toolId: string) => void;
+  onToolChange: (toolId: string, options?: any) => void;
+  toolState: any;
+  onToolStateChange: (newState: any) => void;
   onReset?: () => void;
   onSave?: () => void;
   running: boolean;
@@ -26,14 +27,13 @@ export default function ToolPanel({
   tools,
   activeToolId,
   onToolChange,
+  toolState,
+  onToolStateChange,
   onReset,
   onSave,
   running
 }: ToolPanelProps) {
   const activeTool = tools.find(t => t.id === activeToolId);
-
-  // Local state to force re-render when color changes
-  const [_, setForceUpdate] = useState(0);
 
   return (
     <div className="flex flex-col h-full bg-background border-r">
@@ -64,9 +64,7 @@ export default function ToolPanel({
                       <DropdownMenuItem
                         key={variant.id}
                         onClick={() => {
-                          tool.setVariant?.(variant.id);
-                          onToolChange(tool.id);
-                          setForceUpdate(prev => prev + 1);
+                          onToolChange(tool.id, variant.id);
                         }}
                       >
                         <variant.icon className="mr-2 h-4 w-4" />
@@ -101,8 +99,9 @@ export default function ToolPanel({
         </div>
 
         {/* Tool Options */}
-        {activeTool?.renderOptions({
-          onChange: () => setForceUpdate(prev => prev + 1)
+        {activeTool && activeTool.renderOptions({
+          state: toolState,
+          update: (partial: any) => onToolStateChange({ ...toolState, ...partial })
         })}
       </ScrollArea>
 

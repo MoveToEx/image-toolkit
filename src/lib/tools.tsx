@@ -1,8 +1,8 @@
-import { MouseEvent, WheelEvent, ReactNode } from 'react';
+import { MouseEvent, WheelEvent, ReactNode, useEffect } from 'react';
 import { Brush, Square, MousePointer2, LucideIcon, SquareSplitHorizontal, SquareSplitVertical, LayoutGrid, Crop, Maximize, Columns } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { convertFileSrc } from '@tauri-apps/api/core';
 
 export type Point = { x: number; y: number };
@@ -21,6 +21,7 @@ export interface ToolContext {
 }
 
 export interface ToolEvent<E = MouseEvent | WheelEvent> {
+  type: 'mousedown' | 'mousemove' | 'mouseup' | 'mouseleave' | 'wheel';
   originalEvent: E;
   imagePoint: Point;
   viewPoint: Point;
@@ -32,27 +33,26 @@ export interface ToolVariant {
   icon: LucideIcon;
 }
 
-export abstract class Tool {
+export abstract class Tool<S, O = void> {
   abstract id: string;
   abstract name: string;
   abstract icon: LucideIcon;
 
   variants?: ToolVariant[];
-  setVariant?(variantId: string): void;
 
-  onMouseDown(_event: ToolEvent<MouseEvent>, _context: ToolContext): void { }
-  onMouseMove(_event: ToolEvent<MouseEvent>, _context: ToolContext): void { }
-  onMouseUp(_event: ToolEvent<MouseEvent>, _context: ToolContext): void { }
-  onMouseLeave(_event: ToolEvent<MouseEvent>, _context: ToolContext): void { }
-  onWheel(_event: ToolEvent<WheelEvent>, _context: ToolContext): void { }
+  abstract init(options?: O): S;
 
-  abstract render(context: ToolContext): void;
+  abstract reduce(state: S, event: ToolEvent, context: ToolContext): S;
+
+  abstract render(state: S, context: ToolContext): void;
+
+  abstract renderPreview(state: S, context: ToolContext): void;
 
   get clip(): boolean { return true; }
 
-  reset(): void { }
-  getData(): any { return null; }
-  renderOptions(_props: { onChange: () => void }): ReactNode { return null; }
+  getData(_state: S): any { return null; }
+
+  renderOptions(_props: { state: S, update: (val: S extends void ? never : Partial<S>) => void }): ReactNode { return null; }
 }
 
 // --- Shared States ---
@@ -74,79 +74,89 @@ export interface RectShape extends Shape {
 // --- Concrete Tools ---
 
 // 1. View Tool
-export class ViewTool extends Tool {
+export class ViewTool extends Tool<void> {
   id = 'view';
   name = 'View';
   icon = MousePointer2;
 
-  render() {
-    // Nothing to render
-  }
+  init() { }
+  reduce() { }
+  render() { }
+  renderPreview() { }
 }
 
-// 2. Drawing Tools (Brush & Rectangle)
-export class BrushTool extends Tool {
+// 2. Brush Tool
+export interface BrushToolState {
+  shapes: BrushStroke[];
+  color: string;
+  currentShape: BrushStroke | null;
+  isDrawing: boolean;
+}
+
+export class BrushTool extends Tool<BrushToolState> {
   id = 'brush';
   name = 'Brush';
   icon = Brush;
 
-  shapes: BrushStroke[] = [];
-  color: string = '#ff0000';
-  private currentShape: BrushStroke | null = null;
-  private isDrawing = false;
-
-  reset() {
-    this.shapes = [];
-  }
-
-  getData() {
-    return { drawing: this.shapes };
-  }
-
-  renderOptions({ onChange }: { onChange: () => void }) {
-    return (
-      <div className="mt-6">
-        <Label className="mb-2 block text-sm font-medium text-muted-foreground">Color</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            type="color"
-            value={this.color}
-            onChange={(e) => {
-              this.color = e.target.value;
-              onChange();
-            }}
-            className="w-12 h-8 p-1 cursor-pointer"
-          />
-          <span className="text-xs text-muted-foreground">{this.color}</span>
-        </div>
-      </div>
-    );
-  }
-
-  onMouseDown(event: ToolEvent<MouseEvent>) {
-    if (event.originalEvent.button !== 0) return;
-    this.isDrawing = true;
-    this.currentShape = {
-      color: this.color,
-      width: 5,
-      points: [event.imagePoint]
+  init(): BrushToolState {
+    return {
+      shapes: [],
+      color: '#ff0000',
+      currentShape: null,
+      isDrawing: false
     };
   }
 
-  onMouseMove(event: ToolEvent<MouseEvent>) {
-    if (!this.isDrawing || !this.currentShape) return;
-    this.currentShape.points.push(event.imagePoint);
+  getData(state: BrushToolState) {
+    return { drawing: state.shapes };
   }
 
-  onMouseUp() {
-    if (this.isDrawing && this.currentShape) {
-      this.shapes.push(this.currentShape);
-      this.currentShape = null;
-      this.isDrawing = false;
+  reduce(state: BrushToolState, event: ToolEvent<MouseEvent>, context: ToolContext): BrushToolState {
+    switch (event.type) {
+      case 'mousedown': {
+        if (event.originalEvent.button !== 0) return state;
+        return {
+          ...state,
+          isDrawing: true,
+          currentShape: {
+            color: state.color,
+            width: 5,
+            points: [event.imagePoint]
+          }
+        };
+      }
+      case 'mousemove': {
+        context.canvas.style.cursor = 'crosshair';
+        if (!state.isDrawing || !state.currentShape) return state;
+        return {
+          ...state,
+          currentShape: {
+            ...state.currentShape,
+            points: [...state.currentShape.points, event.imagePoint]
+          }
+        };
+      }
+      case 'mouseup': {
+        if (state.isDrawing && state.currentShape) {
+          return {
+            ...state,
+            shapes: [...state.shapes, state.currentShape],
+            currentShape: null,
+            isDrawing: false
+          };
+        }
+        return state;
+      }
+      case 'mouseleave': {
+        context.canvas.style.cursor = 'default';
+        return state;
+      }
+      default:
+        return state;
     }
   }
 
-  render(context: ToolContext) {
+  render(state: BrushToolState, context: ToolContext) {
     const { ctx, transform } = context;
     const { x, y, scale } = transform;
 
@@ -169,77 +179,108 @@ export class BrushTool extends Tool {
       ctx.stroke();
     };
 
-    this.shapes.forEach(drawShape);
-    if (this.currentShape) {
-      drawShape(this.currentShape);
+    state.shapes.forEach(drawShape);
+    if (state.currentShape) {
+      drawShape(state.currentShape);
     }
 
     ctx.restore();
   }
-}
 
-export class RectangleTool extends Tool {
-  id = 'rect';
-  name = 'Rectangle';
-  icon = Square;
-
-  shapes: RectShape[] = [];
-  color: string = '#ff0000';
-  private currentShape: RectShape | null = null;
-  private isDrawing = false;
-
-  reset() {
-    this.shapes = [];
+  renderPreview(state: BrushToolState, context: ToolContext) {
+    this.render(state, context);
   }
 
-  getData() {
-    return { drawing: this.shapes };
-  }
-
-  renderOptions({ onChange }: { onChange: () => void }) {
+  renderOptions({ state, update }: { state: BrushToolState, update: (val: Partial<BrushToolState>) => void }) {
     return (
       <div className="mt-6">
         <Label className="mb-2 block text-sm font-medium text-muted-foreground">Color</Label>
         <div className="flex items-center gap-2">
           <Input
             type="color"
-            value={this.color}
-            onChange={(e) => {
-              this.color = e.target.value;
-              onChange();
-            }}
+            value={state.color}
+            onChange={(e) => update({ color: e.target.value })}
             className="w-12 h-8 p-1 cursor-pointer"
           />
-          <span className="text-xs text-muted-foreground">{this.color}</span>
+          <span className="text-xs text-muted-foreground">{state.color}</span>
         </div>
       </div>
     );
   }
+}
 
-  onMouseDown(event: ToolEvent<MouseEvent>) {
-    if (event.originalEvent.button !== 0) return;
-    this.isDrawing = true;
-    this.currentShape = {
-      color: this.color,
-      start: event.imagePoint,
-      end: event.imagePoint
+// 3. Rectangle Tool
+export interface RectToolState {
+  shapes: RectShape[];
+  color: string;
+  currentShape: RectShape | null;
+  isDrawing: boolean;
+}
+
+export class RectangleTool extends Tool<RectToolState> {
+  id = 'rect';
+  name = 'Rectangle';
+  icon = Square;
+
+  init(): RectToolState {
+    return {
+      shapes: [],
+      color: '#ff0000',
+      currentShape: null,
+      isDrawing: false
     };
   }
 
-  onMouseMove(event: ToolEvent<MouseEvent>) {
-    if (!this.isDrawing || !this.currentShape) return;
-    this.currentShape.end = event.imagePoint;
+  getData(state: RectToolState) {
+    return { drawing: state.shapes };
   }
 
-  onMouseUp() {
-    if (this.isDrawing && this.currentShape) {
-      this.shapes.push(this.currentShape);
-      this.currentShape = null;
-      this.isDrawing = false;
+  reduce(state: RectToolState, event: ToolEvent<MouseEvent>, context: ToolContext): RectToolState {
+    switch (event.type) {
+      case 'mousedown': {
+        if (event.originalEvent.button !== 0) return state;
+        return {
+          ...state,
+          isDrawing: true,
+          currentShape: {
+            color: state.color,
+            start: event.imagePoint,
+            end: event.imagePoint
+          }
+        };
+      }
+      case 'mousemove': {
+        context.canvas.style.cursor = 'crosshair';
+        if (!state.isDrawing || !state.currentShape) return state;
+        return {
+          ...state,
+          currentShape: {
+            ...state.currentShape,
+            end: event.imagePoint
+          }
+        };
+      }
+      case 'mouseup': {
+        if (state.isDrawing && state.currentShape) {
+          return {
+            ...state,
+            shapes: [...state.shapes, state.currentShape],
+            currentShape: null,
+            isDrawing: false
+          };
+        }
+        return state;
+      }
+      case 'mouseleave': {
+        context.canvas.style.cursor = 'default';
+        return state;
+      }
+      default:
+        return state;
     }
   }
 
-  render(context: ToolContext) {
+  render(state: RectToolState, context: ToolContext) {
     const { ctx, transform } = context;
     const { x, y, scale } = transform;
 
@@ -249,7 +290,7 @@ export class RectangleTool extends Tool {
 
     const drawShape = (shape: RectShape) => {
       ctx.beginPath();
-      if (shape === this.currentShape) {
+      if (shape === state.currentShape) {
         ctx.fillStyle = shape.color + '80';
       } else {
         ctx.fillStyle = shape.color;
@@ -262,17 +303,46 @@ export class RectangleTool extends Tool {
       ctx.strokeRect(shape.start.x, shape.start.y, w, h);
     };
 
-    this.shapes.forEach(drawShape);
-    if (this.currentShape) {
-      drawShape(this.currentShape);
+    state.shapes.forEach(drawShape);
+    if (state.currentShape) {
+      drawShape(state.currentShape);
     }
 
     ctx.restore();
   }
+
+  renderPreview(state: RectToolState, context: ToolContext) {
+    this.render(state, context);
+  }
+
+  renderOptions({ state, update }: { state: RectToolState, update: (val: Partial<RectToolState>) => void }) {
+    return (
+      <div className="mt-6">
+        <Label className="mb-2 block text-sm font-medium text-muted-foreground">Color</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            type="color"
+            value={state.color}
+            onChange={(e) => update({ color: e.target.value })}
+            className="w-12 h-8 p-1 cursor-pointer"
+          />
+          <span className="text-xs text-muted-foreground">{state.color}</span>
+        </div>
+      </div>
+    );
+  }
 }
 
-// 3. Split Tools
-export class SplitTool extends Tool {
+// 4. Split Tool
+export type SplitMode = 'cross' | 'horizontal' | 'vertical';
+
+export interface SplitToolState {
+  mode: SplitMode;
+  splitPoint: Point | null;
+  hoverPoint: Point | null;
+}
+
+export class SplitTool extends Tool<SplitToolState, SplitMode> {
   id = 'split';
   name = 'Split';
   icon = SquareSplitVertical;
@@ -283,53 +353,56 @@ export class SplitTool extends Tool {
     { id: 'vertical', name: 'Vertical Split', icon: SquareSplitVertical }
   ];
 
-  protected hoverPoint: Point | null = null;
-  splitPoint: Point | null = null;
-
-  reset() {
-    this.splitPoint = null;
+  init(mode: SplitMode = 'cross'): SplitToolState {
+    return {
+      mode,
+      splitPoint: null,
+      hoverPoint: null
+    };
   }
 
-  getData() {
-    if (this.splitPoint) {
+  getData(state: SplitToolState) {
+    if (state.splitPoint) {
       return {
-        mode: this._mode,
-        point: this.splitPoint
+        mode: state.mode,
+        point: state.splitPoint
       };
     }
     return null;
   }
 
-  private _mode: 'cross' | 'horizontal' | 'vertical' = 'cross';
-
-  get mode() { return this._mode; }
-
-  onMouseDown(event: ToolEvent<MouseEvent>) {
-    if (event.originalEvent.button === 0) {
-      this.updateSplitPoint(event.imagePoint);
-    }
-    else if (event.originalEvent.button === 2) {
-      this.reset();
-    }
-  }
-
-  onMouseMove(event: ToolEvent<MouseEvent>, context: ToolContext) {
-    const { image } = context;
-    if (image) {
-      const { x, y } = event.imagePoint;
-      if (x >= 0 && x <= image.width && y >= 0 && y <= image.height) {
-        this.hoverPoint = event.imagePoint;
-        return;
+  reduce(state: SplitToolState, event: ToolEvent<MouseEvent>, context: ToolContext): SplitToolState {
+    switch (event.type) {
+      case 'mousedown': {
+        if (event.originalEvent.button === 0) {
+          let newSplitPoint = state.splitPoint;
+          const p = event.imagePoint;
+          if (state.mode === 'cross') {
+            newSplitPoint = p;
+          } else if (state.mode === 'horizontal') {
+            newSplitPoint = state.splitPoint ? { x: state.splitPoint.x, y: p.y } : p;
+          } else if (state.mode === 'vertical') {
+            newSplitPoint = state.splitPoint ? { x: p.x, y: state.splitPoint.y } : p;
+          }
+          return { ...state, splitPoint: newSplitPoint };
+        } else if (event.originalEvent.button === 2) {
+          return { ...state, splitPoint: null };
+        }
+        return state;
       }
+      case 'mousemove': {
+        context.canvas.style.cursor = 'crosshair';
+        return { ...state, hoverPoint: event.imagePoint };
+      }
+      case 'mouseleave': {
+        context.canvas.style.cursor = 'default';
+        return { ...state, hoverPoint: null };
+      }
+      default: return state;
     }
-    this.hoverPoint = null;
   }
 
-  onMouseLeave() {
-    this.hoverPoint = null;
-  }
-
-  protected drawLine(ctx: CanvasRenderingContext2D, p: Point, type: 'horizontal' | 'vertical' | 'cross', _scale: number, image: HTMLImageElement) {
+  protected drawLine(ctx: CanvasRenderingContext2D, p: Point, type: SplitMode, image: HTMLImageElement) {
     ctx.beginPath();
     if (type === 'vertical' || type === 'cross') {
       ctx.moveTo(0, p.y);
@@ -342,7 +415,7 @@ export class SplitTool extends Tool {
     ctx.stroke();
   }
 
-  render(context: ToolContext) {
+  render(state: SplitToolState, context: ToolContext) {
     const { ctx, transform, image } = context;
     if (!image) return;
     const { x, y, scale } = transform;
@@ -354,144 +427,112 @@ export class SplitTool extends Tool {
     // Invert pixels
     ctx.globalCompositeOperation = 'difference';
     ctx.strokeStyle = 'white';
-    ctx.lineWidth = 1 / scale; // 1 screen pixel width
+    ctx.lineWidth = 1 / scale;
 
-    if (this.splitPoint) {
-      this.drawSplit(ctx, this.splitPoint, scale, image);
-    } else if (this.hoverPoint) {
-      this.drawSplit(ctx, this.hoverPoint, scale, image);
+    if (state.splitPoint) {
+      this.drawLine(ctx, state.splitPoint, state.mode, image);
+    } else if (state.hoverPoint) {
+      this.drawLine(ctx, state.hoverPoint, state.mode, image);
     }
 
     ctx.restore();
   }
 
-  setVariant(variantId: string) {
-    if (['cross', 'horizontal', 'vertical'].includes(variantId)) {
-      this._mode = variantId as 'cross' | 'horizontal' | 'vertical';
-      const variant = this.variants.find(v => v.id === variantId);
-      if (variant) {
-        this.icon = variant.icon;
-        this.name = variant.name;
-      }
-    }
-  }
-
-  updateSplitPoint(p: Point) {
-    if (this._mode === 'cross') {
-      this.splitPoint = p;
-    } else if (this._mode === 'horizontal') {
-      if (this.splitPoint) {
-        this.splitPoint = { x: this.splitPoint.x, y: p.y };
-      } else {
-        this.splitPoint = p;
-      }
-    } else if (this._mode === 'vertical') {
-      if (this.splitPoint) {
-        this.splitPoint = { x: p.x, y: this.splitPoint.y };
-      } else {
-        this.splitPoint = p;
-      }
-    }
-  }
-
-  drawSplit(ctx: CanvasRenderingContext2D, p: Point, scale: number, image: HTMLImageElement) {
-    this.drawLine(ctx, p, this._mode, scale, image);
+  renderPreview(state: SplitToolState, context: ToolContext) {
+    this.render(state, context);
   }
 }
 
-export class TrimTool extends Tool {
+// 5. Trim Tool
+export interface TrimToolState {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  dragging: 'top' | 'bottom' | 'left' | 'right' | null;
+}
+
+export class TrimTool extends Tool<TrimToolState> {
   id = 'trim';
   name = 'Trim';
   icon = Crop;
 
-  top = 0;
-  bottom = 0;
-  left = 0;
-  right = 0;
-
-  private dragging: 'top' | 'bottom' | 'left' | 'right' | null = null;
-
-  reset() {
-    this.top = 0;
-    this.bottom = 0;
-    this.left = 0;
-    this.right = 0;
-  }
-
-  getData() {
+  init(): TrimToolState {
     return {
-      top: Math.round(this.top),
-      bottom: Math.round(this.bottom),
-      left: Math.round(this.left),
-      right: Math.round(this.right)
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      dragging: null
     };
   }
 
-  onMouseDown(event: ToolEvent<MouseEvent>, context: ToolContext) {
-    if (!context.image) return;
-    const { x, y } = event.imagePoint;
-    const { width, height } = context.image;
-    const threshold = 10 / context.transform.scale; // 10 screen pixels tolerance
-
-    // Check proximity to lines
-    // Top line: y = this.top
-    if (Math.abs(y - this.top) < threshold) {
-      this.dragging = 'top';
-    }
-    // Bottom line: y = height - this.bottom
-    else if (Math.abs(y - (height - this.bottom)) < threshold) {
-      this.dragging = 'bottom';
-    }
-    // Left line: x = this.left
-    else if (Math.abs(x - this.left) < threshold) {
-      this.dragging = 'left';
-    }
-    // Right line: x = width - this.right
-    else if (Math.abs(x - (width - this.right)) < threshold) {
-      this.dragging = 'right';
-    }
+  getData(state: TrimToolState) {
+    return {
+      top: Math.round(state.top),
+      bottom: Math.round(state.bottom),
+      left: Math.round(state.left),
+      right: Math.round(state.right)
+    };
   }
 
-  onMouseMove(event: ToolEvent<MouseEvent>, context: ToolContext) {
-    if (!context.image) return;
+  reduce(state: TrimToolState, event: ToolEvent<MouseEvent>, context: ToolContext): TrimToolState {
+    if (!context.image) return state;
     const { width, height } = context.image;
-    const { x, y } = event.imagePoint;
 
-    if (this.dragging) {
-      if (this.dragging === 'top') {
-        this.top = Math.max(0, Math.min(y, height - this.bottom - 10));
-      } else if (this.dragging === 'bottom') {
-        this.bottom = Math.max(0, Math.min(height - y, height - this.top - 10));
-      } else if (this.dragging === 'left') {
-        this.left = Math.max(0, Math.min(x, width - this.right - 10));
-      } else if (this.dragging === 'right') {
-        this.right = Math.max(0, Math.min(width - x, width - this.left - 10));
+    switch (event.type) {
+      case 'mousedown': {
+        const { x, y } = event.imagePoint;
+        const threshold = 10 / context.transform.scale;
+        let dragging: any = null;
+        if (Math.abs(y - state.top) < threshold) dragging = 'top';
+        else if (Math.abs(y - (height - state.bottom)) < threshold) dragging = 'bottom';
+        else if (Math.abs(x - state.left) < threshold) dragging = 'left';
+        else if (Math.abs(x - (width - state.right)) < threshold) dragging = 'right';
+
+        if (dragging) {
+          context.canvas.style.cursor = 'grabbing';
+        }
+        return { ...state, dragging };
       }
-      return;
+      case 'mousemove': {
+        const { x, y } = event.imagePoint;
+
+        if (state.dragging) {
+          context.canvas.style.cursor = 'grabbing';
+          let newState = { ...state };
+          if (state.dragging === 'top') newState.top = Math.max(0, Math.min(y, height - state.bottom - 10));
+          else if (state.dragging === 'bottom') newState.bottom = Math.max(0, Math.min(height - y, height - state.top - 10));
+          else if (state.dragging === 'left') newState.left = Math.max(0, Math.min(x, width - state.right - 10));
+          else if (state.dragging === 'right') newState.right = Math.max(0, Math.min(width - x, width - state.left - 10));
+          return newState;
+        } else {
+          // Hover cursor
+          const threshold = 10 / context.transform.scale;
+          if (Math.abs(y - state.top) < threshold) context.canvas.style.cursor = 'ns-resize';
+          else if (Math.abs(y - (height - state.bottom)) < threshold) context.canvas.style.cursor = 'ns-resize';
+          else if (Math.abs(x - state.left) < threshold) context.canvas.style.cursor = 'ew-resize';
+          else if (Math.abs(x - (width - state.right)) < threshold) context.canvas.style.cursor = 'ew-resize';
+          else context.canvas.style.cursor = 'default';
+        }
+        return state;
+      }
+      case 'mouseup': {
+        context.canvas.style.cursor = 'default';
+        return { ...state, dragging: null };
+      }
+      case 'mouseleave': {
+        // Keep dragging state if captured? But if we leave, we typically stop?
+        // With pointer capture, we might not get mouseleave until release.
+        // If we do get it, resetting dragging is safe.
+        context.canvas.style.cursor = 'default';
+        return { ...state, dragging: null };
+      }
+      default: return state;
     }
-
-    // Update cursor
-    const threshold = 10 / context.transform.scale;
-    const canvas = context.canvas;
-
-    if (Math.abs(y - this.top) < threshold || Math.abs(y - (height - this.bottom)) < threshold) {
-      canvas.style.cursor = 'ns-resize';
-    } else if (Math.abs(x - this.left) < threshold || Math.abs(x - (width - this.right)) < threshold) {
-      canvas.style.cursor = 'ew-resize';
-    } else {
-      canvas.style.cursor = 'default';
-    }
   }
 
-  onMouseUp() {
-    this.dragging = null;
-  }
-
-  onMouseLeave() {
-    this.dragging = null;
-  }
-
-  render(context: ToolContext) {
+  render(state: TrimToolState, context: ToolContext) {
     const { ctx, transform, image } = context;
     if (!image) return;
     const { x, y, scale } = transform;
@@ -501,84 +542,67 @@ export class TrimTool extends Tool {
     ctx.translate(x, y);
     ctx.scale(scale, scale);
 
-    // Draw semi-transparent overlay on trimmed areas
+    // Draw semi-transparent overlay
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-
-    // Top area
-    if (this.top > 0) ctx.fillRect(0, 0, width, this.top);
-    // Bottom area
-    if (this.bottom > 0) ctx.fillRect(0, height - this.bottom, width, this.bottom);
-    // Left area (between top and bottom)
-    if (this.left > 0) ctx.fillRect(0, this.top, this.left, height - this.top - this.bottom);
-    // Right area (between top and bottom)
-    if (this.right > 0) ctx.fillRect(width - this.right, this.top, this.right, height - this.top - this.bottom);
+    if (state.top > 0) ctx.fillRect(0, 0, width, state.top);
+    if (state.bottom > 0) ctx.fillRect(0, height - state.bottom, width, state.bottom);
+    if (state.left > 0) ctx.fillRect(0, state.top, state.left, height - state.top - state.bottom);
+    if (state.right > 0) ctx.fillRect(width - state.right, state.top, state.right, height - state.top - state.bottom);
 
     // Draw lines
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 1 / scale;
     ctx.setLineDash([5 / scale, 5 / scale]);
 
-    // Top line
-    ctx.beginPath();
-    ctx.moveTo(0, this.top);
-    ctx.lineTo(width, this.top);
-    ctx.stroke();
-
-    // Bottom line
-    ctx.beginPath();
-    ctx.moveTo(0, height - this.bottom);
-    ctx.lineTo(width, height - this.bottom);
-    ctx.stroke();
-
-    // Left line
-    ctx.beginPath();
-    ctx.moveTo(this.left, 0);
-    ctx.lineTo(this.left, height);
-    ctx.stroke();
-
-    // Right line
-    ctx.beginPath();
-    ctx.moveTo(width - this.right, 0);
-    ctx.lineTo(width - this.right, height);
-    ctx.stroke();
+    ctx.strokeRect(0, state.top, width, 0); // Top
+    ctx.strokeRect(0, height - state.bottom, width, 0); // Bottom
+    ctx.strokeRect(state.left, 0, 0, height); // Left
+    ctx.strokeRect(width - state.right, 0, 0, height); // Right
 
     ctx.restore();
   }
+
+  renderPreview(state: TrimToolState, context: ToolContext) {
+    this.render(state, context);
+  }
 }
 
-export class ExpandTool extends Tool {
+// 6. Expand Tool
+export interface ExpandToolState {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  color: string;
+  dragging: 'top' | 'bottom' | 'left' | 'right' | null;
+}
+
+export class ExpandTool extends Tool<ExpandToolState> {
   id = 'expand';
   name = 'Expand';
   icon = Maximize;
 
   get clip() { return false; }
 
-  top = 0;
-  bottom = 0;
-  left = 0;
-  right = 0;
-  color = '#ffffff';
-
-  private dragging: 'top' | 'bottom' | 'left' | 'right' | null = null;
-
-  reset() {
-    this.top = 0;
-    this.bottom = 0;
-    this.left = 0;
-    this.right = 0;
-  }
-
-  getData() {
+  init(): ExpandToolState {
     return {
-      top: Math.round(this.top),
-      bottom: Math.round(this.bottom),
-      left: Math.round(this.left),
-      right: Math.round(this.right),
-      color: this.color
+      top: 0, bottom: 0, left: 0, right: 0,
+      color: '#ffffff',
+      dragging: null
     };
   }
 
-  renderOptions({ onChange }: { onChange: () => void }) {
+  getData(state: ExpandToolState) {
+    return {
+      top: Math.round(state.top),
+      bottom: Math.round(state.bottom),
+      left: Math.round(state.left),
+      right: Math.round(state.right),
+      color: state.color
+    };
+  }
+
+  renderOptions({ state, update }: { state: ExpandToolState, update: (val: Partial<ExpandToolState>) => void }) {
     return (
       <div className="mt-6 space-y-4">
         <div>
@@ -586,89 +610,69 @@ export class ExpandTool extends Tool {
           <div className="flex items-center gap-2">
             <Input
               type="color"
-              value={this.color}
-              onChange={(e) => {
-                this.color = e.target.value;
-                onChange();
-              }}
+              value={state.color}
+              onChange={(e) => update({ color: e.target.value })}
               className="w-12 h-8 p-1 cursor-pointer"
             />
-            <span className="text-xs text-muted-foreground">{this.color}</span>
+            <span className="text-xs text-muted-foreground">{state.color}</span>
           </div>
         </div>
       </div>
     );
   }
 
-  onMouseDown(event: ToolEvent<MouseEvent>, context: ToolContext) {
-    if (!context.image) return;
-    const { x, y } = event.imagePoint;
+  reduce(state: ExpandToolState, event: ToolEvent<MouseEvent>, context: ToolContext): ExpandToolState {
+    if (!context || !context.image) return state;
     const { width, height } = context.image;
-    const threshold = 10 / context.transform.scale;
 
-    // Check proximity to expanded boundaries
-    // Top: y = -this.top
-    if (Math.abs(y - (-this.top)) < threshold) {
-      this.dragging = 'top';
-    }
-    // Bottom: y = height + this.bottom
-    else if (Math.abs(y - (height + this.bottom)) < threshold) {
-      this.dragging = 'bottom';
-    }
-    // Left: x = -this.left
-    else if (Math.abs(x - (-this.left)) < threshold) {
-      this.dragging = 'left';
-    }
-    // Right: x = width + this.right
-    else if (Math.abs(x - (width + this.right)) < threshold) {
-      this.dragging = 'right';
-    }
-  }
+    switch (event.type) {
+      case 'mousedown': {
+        const { x, y } = event.imagePoint;
+        const threshold = 10 / context.transform.scale;
+        let dragging: any = null;
+        if (Math.abs(y - (-state.top)) < threshold) dragging = 'top';
+        else if (Math.abs(y - (height + state.bottom)) < threshold) dragging = 'bottom';
+        else if (Math.abs(x - (-state.left)) < threshold) dragging = 'left';
+        else if (Math.abs(x - (width + state.right)) < threshold) dragging = 'right';
 
-  onMouseMove(event: ToolEvent<MouseEvent>, context: ToolContext) {
-    if (!context.image) return;
-    const { width, height } = context.image;
-    const { x, y } = event.imagePoint;
+        if (dragging) context.canvas.style.cursor = 'grabbing';
 
-    if (this.dragging) {
-      if (this.dragging === 'top') {
-        // Dragging up (negative y) increases top
-        this.top = Math.max(0, -y);
-      } else if (this.dragging === 'bottom') {
-        // Dragging down (y > height) increases bottom
-        this.bottom = Math.max(0, y - height);
-      } else if (this.dragging === 'left') {
-        // Dragging left (negative x) increases left
-        this.left = Math.max(0, -x);
-      } else if (this.dragging === 'right') {
-        // Dragging right (x > width) increases right
-        this.right = Math.max(0, x - width);
+        return { ...state, dragging };
       }
-      return;
+      case 'mousemove': {
+        const { x, y } = event.imagePoint;
+
+        if (state.dragging) {
+          context.canvas.style.cursor = 'grabbing';
+          let newState = { ...state };
+          if (state.dragging === 'top') newState.top = Math.max(0, -y);
+          else if (state.dragging === 'bottom') newState.bottom = Math.max(0, y - height);
+          else if (state.dragging === 'left') newState.left = Math.max(0, -x);
+          else if (state.dragging === 'right') newState.right = Math.max(0, x - width);
+          return newState;
+        } else {
+          const threshold = 10 / context.transform.scale;
+          if (Math.abs(y - (-state.top)) < threshold) context.canvas.style.cursor = 'ns-resize';
+          else if (Math.abs(y - (height + state.bottom)) < threshold) context.canvas.style.cursor = 'ns-resize';
+          else if (Math.abs(x - (-state.left)) < threshold) context.canvas.style.cursor = 'ew-resize';
+          else if (Math.abs(x - (width + state.right)) < threshold) context.canvas.style.cursor = 'ew-resize';
+          else context.canvas.style.cursor = 'default';
+        }
+        return state;
+      }
+      case 'mouseup': {
+        context.canvas.style.cursor = 'default';
+        return { ...state, dragging: null };
+      }
+      case 'mouseleave': {
+        context.canvas.style.cursor = 'default';
+        return { ...state, dragging: null };
+      }
+      default: return state;
     }
-
-    // Update cursor
-    const threshold = 10 / context.transform.scale;
-    const canvas = context.canvas;
-
-    if (Math.abs(y - (-this.top)) < threshold || Math.abs(y - (height + this.bottom)) < threshold) {
-      canvas.style.cursor = 'ns-resize';
-    } else if (Math.abs(x - (-this.left)) < threshold || Math.abs(x - (width + this.right)) < threshold) {
-      canvas.style.cursor = 'ew-resize';
-    } else {
-      canvas.style.cursor = 'default';
-    }
   }
 
-  onMouseUp() {
-    this.dragging = null;
-  }
-
-  onMouseLeave() {
-    this.dragging = null;
-  }
-
-  render(context: ToolContext) {
+  render(state: ExpandToolState, context: ToolContext) {
     const { ctx, transform, image } = context;
     if (!image) return;
     const { x, y, scale } = transform;
@@ -678,69 +682,52 @@ export class ExpandTool extends Tool {
     ctx.translate(x, y);
     ctx.scale(scale, scale);
 
-    // Draw expanded areas
-    ctx.fillStyle = this.color;
-
+    ctx.fillStyle = state.color;
     // Top
-    if (this.top > 0) ctx.fillRect(-this.left, -this.top, width + this.left + this.right, this.top);
+    if (state.top > 0) ctx.fillRect(-state.left, -state.top, width + state.left + state.right, state.top);
     // Bottom
-    if (this.bottom > 0) ctx.fillRect(-this.left, height, width + this.left + this.right, this.bottom);
+    if (state.bottom > 0) ctx.fillRect(-state.left, height, width + state.left + state.right, state.bottom);
     // Left
-    if (this.left > 0) ctx.fillRect(-this.left, 0, this.left, height);
+    if (state.left > 0) ctx.fillRect(-state.left, 0, state.left, height);
     // Right
-    if (this.right > 0) ctx.fillRect(width, 0, this.right, height);
+    if (state.right > 0) ctx.fillRect(width, 0, state.right, height);
 
-    // Draw boundary lines
-    ctx.strokeStyle = '#000'; // Use black for contrast against potentially white fill
+    // Lines
+    ctx.strokeStyle = '#000';
     ctx.lineWidth = 1 / scale;
     ctx.setLineDash([5 / scale, 5 / scale]);
 
-    // Top line
-    ctx.beginPath();
-    ctx.moveTo(-this.left, -this.top);
-    ctx.lineTo(width + this.right, -this.top);
-    ctx.stroke();
+    ctx.strokeRect(-state.left, -state.top, width + state.left + state.right, height + state.top + state.bottom);
 
-    // Bottom line
-    ctx.beginPath();
-    ctx.moveTo(-this.left, height + this.bottom);
-    ctx.lineTo(width + this.right, height + this.bottom);
-    ctx.stroke();
-
-    // Left line
-    ctx.beginPath();
-    ctx.moveTo(-this.left, -this.top);
-    ctx.lineTo(-this.left, height + this.bottom);
-    ctx.stroke();
-
-    // Right line
-    ctx.beginPath();
-    ctx.moveTo(width + this.right, -this.top);
-    ctx.lineTo(width + this.right, height + this.bottom);
-    ctx.stroke();
-
-    // Draw original image boundary for reference
+    // Original image boundary
     ctx.strokeStyle = '#888';
     ctx.setLineDash([]);
     ctx.strokeRect(0, 0, width, height);
 
     ctx.restore();
   }
+
+  renderPreview(state: ExpandToolState, context: ToolContext) {
+    this.render(state, context);
+  }
 }
 
-export class ConcatTool extends Tool {
+// 7. Concat Tool
+export interface ConcatToolState {
+  mode: 'horizontal' | 'vertical';
+  otherImage: string | null;
+  otherImageEl: HTMLImageElement | null;
+  offset: number;
+  color: string;
+  dragging: 'main' | 'other' | null;
+  dragStart: number;
+  offsetStart: number;
+}
+
+export class ConcatTool extends Tool<ConcatToolState> {
   id = 'concat';
   name = 'Concat';
   icon = Columns;
-
-  mode: 'horizontal' | 'vertical' = 'horizontal';
-  otherImage: string | null = null;
-  offset = 0;
-  color = '#ffffff';
-  private otherImageEl: HTMLImageElement | null = null;
-  private dragging: 'main' | 'other' | null = null;
-  private dragStart = 0;
-  private offsetStart = 0;
 
   constructor(private getItems: () => string[]) {
     super();
@@ -748,154 +735,76 @@ export class ConcatTool extends Tool {
 
   get clip() { return false; }
 
-  reset() {
-    this.mode = 'horizontal';
-    this.otherImage = null;
-    this.otherImageEl = null;
-    this.offset = 0;
-    this.color = '#ffffff';
-    this.dragging = null;
-  }
-
-  getData() {
-    if (!this.otherImage) return null;
+  init(): ConcatToolState {
     return {
-      image: this.otherImage,
-      mode: this.mode,
-      offset: Math.round(this.offset),
-      color: this.color
+      mode: 'horizontal',
+      otherImage: null,
+      otherImageEl: null,
+      offset: 0,
+      color: '#ffffff',
+      dragging: null,
+      dragStart: 0,
+      offsetStart: 0
     };
   }
 
-  // Helper to determine layout and smaller image
-  private getLayout(image: HTMLImageElement, other: HTMLImageElement) {
+  getData(state: ConcatToolState) {
+    if (!state.otherImage) return null;
+    return {
+      image: state.otherImage,
+      mode: state.mode,
+      offset: Math.round(state.offset),
+      color: state.color
+    };
+  }
+
+  protected getLayout(image: HTMLImageElement, other: HTMLImageElement, state: ConcatToolState) {
     let mainRect = { x: 0, y: 0, w: image.width, h: image.height };
     let otherRect = { x: 0, y: 0, w: other.width, h: other.height };
     let smaller: 'main' | 'other' | null = null;
     let maxOffset = 0;
 
-    if (this.mode === 'horizontal') {
-      // Horizontal concatenation
-      // Align vertically (y-axis)
+    if (state.mode === 'horizontal') {
+      mainRect.x = 0;
       otherRect.x = image.width;
 
       if (image.height < other.height) {
         smaller = 'main';
         maxOffset = other.height - image.height;
-        mainRect.y = this.offset;
+        mainRect.y = state.offset;
       } else if (other.height < image.height) {
         smaller = 'other';
         maxOffset = image.height - other.height;
-        otherRect.y = this.offset;
+        otherRect.y = state.offset;
       }
     } else {
-      // Vertical concatenation
-      // Align horizontally (x-axis)
+      mainRect.y = 0;
       otherRect.y = image.height;
 
       if (image.width < other.width) {
         smaller = 'main';
         maxOffset = other.width - image.width;
-        mainRect.x = this.offset;
+        mainRect.x = state.offset;
       } else if (other.width < image.width) {
         smaller = 'other';
         maxOffset = image.width - other.width;
-        otherRect.x = this.offset;
+        otherRect.x = state.offset;
       }
     }
 
     return { mainRect, otherRect, smaller, maxOffset };
   }
 
-  onMouseDown(event: ToolEvent<MouseEvent>, context: ToolContext) {
-    if (!context.image || !this.otherImageEl) return;
-    const { image } = context;
-    const { mainRect, otherRect, smaller } = this.getLayout(image, this.otherImageEl);
-    const { x, y } = event.imagePoint;
-
-    // Check hit
-    const hitMain = x >= mainRect.x && x < mainRect.x + mainRect.w && y >= mainRect.y && y < mainRect.y + mainRect.h;
-    const hitOther = x >= otherRect.x && x < otherRect.x + otherRect.w && y >= otherRect.y && y < otherRect.y + otherRect.h;
-
-    if (hitMain && smaller === 'main') {
-      this.dragging = 'main';
-    } else if (hitOther && smaller === 'other') {
-      this.dragging = 'other';
-    } else {
-      return;
-    }
-
-    if (this.mode === 'horizontal') {
-      this.dragStart = y;
-    } else {
-      this.dragStart = x;
-    }
-    this.offsetStart = this.offset;
-  }
-
-  onMouseMove(event: ToolEvent<MouseEvent>, context: ToolContext) {
-    if (!context.image || !this.otherImageEl) return;
-
-    // Cursor update
-    const { smaller, maxOffset } = this.getLayout(context.image, this.otherImageEl);
-    if (!this.dragging) {
-      const { mainRect, otherRect } = this.getLayout(context.image, this.otherImageEl);
-      const { x, y } = event.imagePoint;
-      const hitMain = x >= mainRect.x && x < mainRect.x + mainRect.w && y >= mainRect.y && y < mainRect.y + mainRect.h;
-      const hitOther = x >= otherRect.x && x < otherRect.x + otherRect.w && y >= otherRect.y && y < otherRect.y + otherRect.h;
-
-      if ((hitMain && smaller === 'main') || (hitOther && smaller === 'other')) {
-        context.canvas.style.cursor = 'grab';
-      } else {
-        context.canvas.style.cursor = 'default';
-      }
-      return;
-    }
-
-    context.canvas.style.cursor = 'grabbing';
-
-    let current = 0;
-    if (this.mode === 'horizontal') {
-      current = event.imagePoint.y;
-    } else {
-      current = event.imagePoint.x;
-    }
-
-    const delta = current - this.dragStart;
-    this.offset = Math.max(0, Math.min(this.offsetStart + delta, maxOffset));
-  }
-
-  onMouseUp() {
-    this.dragging = null;
-  }
-
-  onMouseLeave() {
-    this.dragging = null;
-  }
-
-  loadOtherImage(src: string, onLoad: () => void) {
-    if (!src) return;
-    const img = new Image();
-    img.src = convertFileSrc(src);
-    img.onload = () => {
-      this.otherImageEl = img;
-      onLoad();
-    };
-  }
-
-  renderOptions({ onChange }: { onChange: () => void }) {
-    const handleModeChange = (val: string) => {
-      this.mode = val as 'horizontal' | 'vertical';
-      onChange();
-    };
-
-    const handleImageChange = (val: string) => {
-      this.otherImage = val;
-      this.offset = 0; // Reset offset when image changes
-      this.loadOtherImage(val, onChange);
-    };
-
+  renderOptions({ state, update }: { state: ConcatToolState, update: (val: Partial<ConcatToolState>) => void }) {
     const items = this.getItems();
+
+    useEffect(() => {
+      if (state.otherImage && (!state.otherImageEl || state.otherImageEl.src !== convertFileSrc(state.otherImage))) {
+        const img = new Image();
+        img.src = convertFileSrc(state.otherImage);
+        img.onload = () => update({ otherImageEl: img });
+      }
+    }, [state.otherImage]);
 
     return (
       <div className="mt-6 space-y-4">
@@ -904,14 +813,11 @@ export class ConcatTool extends Tool {
           <div className="flex items-center gap-2">
             <Input
               type="color"
-              value={this.color}
-              onChange={(e) => {
-                this.color = e.target.value;
-                onChange();
-              }}
+              value={state.color}
+              onChange={(e) => update({ color: e.target.value })}
               className="w-12 h-8 p-1 cursor-pointer"
             />
-            <span className="text-xs text-muted-foreground">{this.color}</span>
+            <span className="text-xs text-muted-foreground">{state.color}</span>
           </div>
         </div>
 
@@ -919,23 +825,19 @@ export class ConcatTool extends Tool {
           <Label className="mb-2 block text-sm font-medium text-muted-foreground">Mode</Label>
           <div className="grid grid-cols-2 gap-2">
             <button
-              className={`flex items-center justify-center p-2 rounded border text-sm ${this.mode === 'horizontal' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}`}
-              onClick={() => handleModeChange('horizontal')}
-            >
-              Horizontal
-            </button>
+              className={`flex items-center justify-center p-2 rounded border text-sm ${state.mode === 'horizontal' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}`}
+              onClick={() => update({ mode: 'horizontal' })}
+            >Horizontal</button>
             <button
-              className={`flex items-center justify-center p-2 rounded border text-sm ${this.mode === 'vertical' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}`}
-              onClick={() => handleModeChange('vertical')}
-            >
-              Vertical
-            </button>
+              className={`flex items-center justify-center p-2 rounded border text-sm ${state.mode === 'vertical' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}`}
+              onClick={() => update({ mode: 'vertical' })}
+            >Vertical</button>
           </div>
         </div>
 
         <div>
           <Label className="mb-2 block text-sm font-medium text-muted-foreground">Second Image</Label>
-          <Select value={this.otherImage || ''} onValueChange={handleImageChange}>
+          <Select value={state.otherImage || ''} onValueChange={(val) => update({ otherImage: val, offset: 0 })}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select image..." />
             </SelectTrigger>
@@ -955,35 +857,94 @@ export class ConcatTool extends Tool {
     );
   }
 
-  render(context: ToolContext) {
+  reduce(state: ConcatToolState, event: ToolEvent<MouseEvent>, context: ToolContext): ConcatToolState {
+    if (!context.image || !state.otherImageEl) return state;
+    const { image } = context;
+    const { mainRect, otherRect, smaller, maxOffset } = this.getLayout(image, state.otherImageEl, state);
+
+    switch (event.type) {
+      case 'mousedown': {
+        const { x, y } = event.imagePoint;
+        const hitMain = x >= mainRect.x && x < mainRect.x + mainRect.w && y >= mainRect.y && y < mainRect.y + mainRect.h;
+        const hitOther = x >= otherRect.x && x < otherRect.x + otherRect.w && y >= otherRect.y && y < otherRect.y + otherRect.h;
+
+        let dragging: any = null;
+        if (hitMain && smaller === 'main') dragging = 'main';
+        else if (hitOther && smaller === 'other') dragging = 'other';
+        else return state;
+
+        if (dragging) context.canvas.style.cursor = 'grabbing';
+
+        return {
+          ...state,
+          dragging,
+          dragStart: state.mode === 'horizontal' ? y : x,
+          offsetStart: state.offset
+        };
+      }
+      case 'mousemove': {
+        if (!state.dragging) {
+          // Hover logic
+          const { x, y } = event.imagePoint;
+          const hitMain = x >= mainRect.x && x < mainRect.x + mainRect.w && y >= mainRect.y && y < mainRect.y + mainRect.h;
+          const hitOther = x >= otherRect.x && x < otherRect.x + otherRect.w && y >= otherRect.y && y < otherRect.y + otherRect.h;
+
+          if ((hitMain && smaller === 'main') || (hitOther && smaller === 'other')) {
+            context.canvas.style.cursor = 'grab';
+          } else {
+            context.canvas.style.cursor = 'default';
+          }
+          return state;
+        }
+
+        context.canvas.style.cursor = 'grabbing';
+        const current = state.mode === 'horizontal' ? event.imagePoint.y : event.imagePoint.x;
+        const delta = current - state.dragStart;
+        return {
+          ...state,
+          offset: Math.max(0, Math.min(state.offsetStart + delta, maxOffset))
+        };
+      }
+      case 'mouseup': {
+        context.canvas.style.cursor = 'default';
+        return { ...state, dragging: null };
+      }
+      case 'mouseleave': {
+        context.canvas.style.cursor = 'default';
+        return { ...state, dragging: null };
+      }
+      default: return state;
+    }
+  }
+
+  render(state: ConcatToolState, context: ToolContext) {
     const { ctx, transform, image } = context;
-    if (!image || !this.otherImageEl) return;
+    if (!image || !state.otherImageEl) return;
     const { x, y, scale } = transform;
 
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(scale, scale);
 
-    const { mainRect, otherRect, smaller } = this.getLayout(image, this.otherImageEl);
+    const { mainRect, otherRect, smaller } = this.getLayout(image, state.otherImageEl, state);
 
     if (image.width > 0 && image.height > 0) {
-      if (this.mode === 'horizontal') {
-        const totalWidth = image.width + this.otherImageEl.width;
-        const totalHeight = Math.max(image.height, this.otherImageEl.height);
-        ctx.fillStyle = this.color;
+      if (state.mode === 'horizontal') {
+        const totalWidth = image.width + state.otherImageEl.width;
+        const totalHeight = Math.max(image.height, state.otherImageEl.height);
+        ctx.fillStyle = state.color;
         ctx.fillRect(0, 0, totalWidth, totalHeight);
       } else {
-        const totalWidth = Math.max(image.width, this.otherImageEl.width);
-        const totalHeight = image.height + this.otherImageEl.height;
-        ctx.fillStyle = this.color;
+        const totalWidth = Math.max(image.width, state.otherImageEl.width);
+        const totalHeight = image.height + state.otherImageEl.height;
+        ctx.fillStyle = state.color;
         ctx.fillRect(0, 0, totalWidth, totalHeight);
       }
     }
 
     ctx.drawImage(image, mainRect.x, mainRect.y);
-    ctx.drawImage(this.otherImageEl, otherRect.x, otherRect.y);
+    ctx.drawImage(state.otherImageEl, otherRect.x, otherRect.y);
 
-    // Draw outline for smaller image to indicate it's interactive
     ctx.strokeStyle = '#00ff00';
     ctx.lineWidth = 2 / scale;
 
@@ -993,21 +954,10 @@ export class ConcatTool extends Tool {
       ctx.strokeRect(otherRect.x, otherRect.y, otherRect.w, otherRect.h);
     }
 
-    // Draw total boundary
-    if (this.mode === 'horizontal') {
-      const totalWidth = image.width + this.otherImageEl.width;
-      const totalHeight = Math.max(image.height, this.otherImageEl.height);
-      ctx.strokeStyle = '#888';
-      ctx.lineWidth = 1 / scale;
-      ctx.strokeRect(0, 0, totalWidth, totalHeight);
-    } else {
-      const totalWidth = Math.max(image.width, this.otherImageEl.width);
-      const totalHeight = image.height + this.otherImageEl.height;
-      ctx.strokeStyle = '#888';
-      ctx.lineWidth = 1 / scale;
-      ctx.strokeRect(0, 0, totalWidth, totalHeight);
-    }
-
     ctx.restore();
+  }
+
+  renderPreview(state: ConcatToolState, context: ToolContext) {
+    this.render(state, context);
   }
 }
