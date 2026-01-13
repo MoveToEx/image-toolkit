@@ -36,7 +36,7 @@ class BrushTool(Tool):
 
     def run(self, state, idx):
         item = state.items[idx]
-        img = Image.open(item.image)
+        img = Image.open(item.image_path)
         draw = ImageDraw.ImageDraw(img)
         for it in self.drawing:
             pts = []
@@ -44,7 +44,7 @@ class BrushTool(Tool):
                 pts.append(pt.x)
                 pts.append(pt.y)
             draw.line(pts, it.color, it.width)
-        img.save(item.image, quality=100)
+        img.save(item.image_path, quality=100)
     
 class RectState(_BaseModel):
     color: str
@@ -58,7 +58,7 @@ class RectTool(Tool):
 
     def run(self, state, idx):
         item = state.items[idx]
-        img = Image.open(item.image)
+        img = Image.open(item.image_path)
         width, height = img.size
 
         draw = ImageDraw.ImageDraw(img)
@@ -66,7 +66,7 @@ class RectTool(Tool):
             l, t, r, b = min(it.start.x, it.end.x), min(it.start.y, it.end.y), max(it.start.x, it.end.x), max(it.start.y, it.end.y)
             l, t, r, b = max(0, l), max(0, t), min(width, r), min(height, b)
             draw.rectangle((l, t, r, b), it.color, width=0)
-        img.save(item.image, quality=100)
+        img.save(item.image_path, quality=100)
 
 
 class SplitTool(Tool):
@@ -76,7 +76,7 @@ class SplitTool(Tool):
 
     def run(self, state, idx):
         item = state.items[idx]
-        img = Image.open(item.image)
+        img = Image.open(item.image_path)
         width, height = img.size
 
         cropped = []
@@ -99,21 +99,21 @@ class SplitTool(Tool):
                 img.crop((0, pt.y + 1, width, height))
             ]
 
-        stem, ext = splitext(item.image)
+        stem, ext = splitext(item.image_path)
         for i, it in enumerate(cropped):
-            fn = item.image.parent / (stem + f'_{i + 1}' + ext)
+            fn = item.image_path.parent / (stem + f'_{i + 1}' + ext)
             it.save(fn, quality=100)
-            with open(item.image.parent / (stem + f'_{i + 1}' + '.txt'), 'w') as f:
-                f.write(state.caption_prefix + item.caption_str)
+            with open(item.image_path.parent / (stem + f'_{i + 1}' + '.txt'), 'w') as f:
+                f.write(', '.join(state.tags_prefix + item.tags))
 
             state.items.insert(idx + 1 + i, DatasetItem(
-                caption=item.image.parent / (stem + f'_{i + 1}' + '.txt'),
-                caption_str = item.caption_str,
-                image=item.image.parent / (stem + f'_{i + 1}' + ext)
+                caption_path=item.image_path.parent / (stem + f'_{i + 1}' + '.txt'),
+                tags = item.tags.copy(),
+                image_path=item.image_path.parent / (stem + f'_{i + 1}' + ext)
             ))
         
-        item.image.unlink()
-        item.caption.unlink()
+        item.image_path.unlink()
+        item.caption_path.unlink()
         state.items.pop(idx)
 
         return stem + '_1' + ext
@@ -127,10 +127,10 @@ class TrimTool(Tool):
 
     def run(self, state, idx):
         item = state.items[idx]
-        img = Image.open(item.image)
+        img = Image.open(item.image_path)
         width, height = img.size
 
-        img.crop((self.left, self.top, width - self.right, height - self.bottom)).save(item.image, quality=100)
+        img.crop((self.left, self.top, width - self.right, height - self.bottom)).save(item.image_path, quality=100)
 
 class ExpandTool(Tool):
     id: Literal['expand']
@@ -142,7 +142,7 @@ class ExpandTool(Tool):
 
     def run(self, state, idx):
         item = state.items[idx]
-        img = Image.open(item.image)
+        img = Image.open(item.image_path)
         width, height = img.size
 
         expanded = Image.new(img.mode, (
@@ -150,7 +150,7 @@ class ExpandTool(Tool):
             height + self.top + self.bottom
         ), self.color)
         expanded.paste(img, (self.left, self.top))
-        expanded.save(item.image, quality=100)
+        expanded.save(item.image_path, quality=100)
 
 class ConcatTool(Tool):
     id: Literal['concat']
@@ -161,12 +161,12 @@ class ConcatTool(Tool):
 
     def run(self, state, idx):
         item = state.items[idx]
-        img = Image.open(item.image)
+        img = Image.open(item.image_path)
         width, height = img.size
 
         fn = Path(self.image)
-        other, other_idx = where(state.items, lambda it: it.image == fn)
-        other_img = Image.open(other.image)
+        other, other_idx = where(state.items, lambda it: it.image_path == fn)
+        other_img = Image.open(other.image_path)
         other_width, other_height = other_img.size
         out = None
         
@@ -198,17 +198,15 @@ class ConcatTool(Tool):
                 out.paste(img, (self.offset, 0))
                 out.paste(other_img, (0, height))
         
-        out.save(item.image)
-        other.caption.unlink()
-        other.image.unlink()
+        out.save(item.image_path)
+        other.caption_path.unlink()
+        other.image_path.unlink()
 
-        with open(item.caption, 'w') as f:
-            caption = list(map(lambda s: s.strip(), item.caption_str.split(',')))
-            for it in seq(other.caption_str.split(',')).map(lambda s: s.strip()):
-                if it not in caption:
-                    caption.append(it)
+        with open(item.caption_path, 'w') as f:
+            for it in other.tags:
+                if it not in item.tags:
+                    item.tags.append(it)
 
-            f.write(', '.join(caption))
-            item.caption_str = ', '.join(caption)
+            f.write(', '.join(state.tags_prefix + item.tags))
         
         state.items.pop(other_idx)

@@ -37,34 +37,26 @@ async def get_state(state: Annotated[AppState, State()]) -> AppState:
 @commands.command()
 async def close_folder(state: Annotated[AppState, State()]) -> None:
     state.folder = None
-    state.caption_prefix = ''
+    state.tags_prefix = []
     state.items = []
 
 class SaveArgs(_BaseModel):
     current: str
     tool: BrushTool | RectTool | SplitTool | TrimTool | ExpandTool | ViewTool | ConcatTool
-    caption: str
-    caption_prefix: str
+    tags: list[str]
 
 
 @commands.command()
 async def save(state: Annotated[AppState, State()], body: SaveArgs) -> str | None:
-    item, idx = where(state.items, lambda it: it.image == Path(body.current))
+    item, idx = where(state.items, lambda it: it.image_path == Path(body.current))
     
     result = None
 
-    if body.caption_prefix != state.caption_prefix:
-        state.caption_prefix = body.caption_prefix
+    if body.tags != item.tags:
+        item.tags = body.tags
 
-        for it in state.items:
-            with open(it.caption, 'w') as f:
-                f.write(state.caption_prefix + it.caption_str)
-
-    if body.caption != item.caption_str:
-        item.caption_str = body.caption
-
-        with open(item.caption, 'w') as f:
-            f.write(state.caption_prefix + body.caption)
+        with open(item.caption_path, 'w') as f:
+            f.write(', '.join(state.tags_prefix + item.tags))
 
     if body.tool:
         result = body.tool.run(state, idx)
@@ -72,15 +64,32 @@ async def save(state: Annotated[AppState, State()], body: SaveArgs) -> str | Non
     return result
 
 @commands.command()
-async def delete_item(state: Annotated[AppState, State()], body: str) -> None:
-    item, idx = where(state.items, lambda it: it.image == Path(body))
+async def set_prefix(state: Annotated[AppState, State()], body: list[str]) -> None:
+    if body == state.tags_prefix:
+        return
     
-    item.caption.unlink()
-    item.image.unlink()
+    state.tags_prefix = body
 
-    state.caption_prefix = get_common_prefix(map(lambda it: it.caption_str, state.items))
+    for it in state.items:
+        with open(it.caption_path, 'w') as f:
+            f.write(', '.join(state.tags_prefix + it.tags))
+
+@commands.command()
+async def delete_item(state: Annotated[AppState, State()], body: str) -> None:
+    item, idx = where(state.items, lambda it: it.image_path == Path(body))
+    
+    item.caption_path.unlink()
+    item.image_path.unlink()
 
     state.items.pop(idx)
+
+    pref = get_common_prefix(map(lambda it: it.tags, state.items))
+
+    if len(pref):
+        for it in state.items:
+            it.tags = it.tags[len(pref):]
+        state.tags_prefix.extend(pref)
+
 
 type BatchOperationPayload = (
     EscapeOperation | UnescapeOperation | AlignResolutionOperation |
@@ -130,7 +139,7 @@ async def on_drag(state: Annotated[AppState, State()], body: list[str]) -> str:
 async def open_folder(state: Annotated[AppState, State()], body: str) -> None:
     p = Path(body)
     state.folder = p
-    state.caption_prefix = ''
+    state.tags_prefix = []
     state.items = []
 
     for it in p.glob('**/*'):
@@ -143,15 +152,15 @@ async def open_folder(state: Annotated[AppState, State()], body: str) -> None:
             caption = f.read()
 
         state.items.append(DatasetItem(
-            caption=caption_path,
-            caption_str=caption,
-            image=it,
+            caption_path=caption_path,
+            image_path=it,
+            tags=list(map(lambda it: it.strip(), caption.split(',')))
         ))
 
-    state.caption_prefix = get_common_prefix(map(lambda it: it.caption_str, state.items))
+    state.tags_prefix = get_common_prefix(map(lambda it: it.tags, state.items))
 
     for it in state.items:
-        it.caption_str = it.caption_str.removeprefix(state.caption_prefix)
+        it.tags = it.tags[len(state.tags_prefix):]
 
 
 def main() -> int:

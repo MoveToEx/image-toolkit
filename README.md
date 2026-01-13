@@ -4,6 +4,10 @@ A utility tool used to accelerate image dataset processing.
 
 Based on [PyTauri](https://pytauri.github.io/pytauri/latest/) and [React](https://react.dev/).
 
+> [!NOTE]
+> This app is primarily focused on tag-based captioning, and may be not suitable for datasets containing natural language.
+
+
 ## Setup
 
 Prerequisites:

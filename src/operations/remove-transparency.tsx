@@ -25,7 +25,7 @@ function RemoveTransparencyOptions({ onConfirm, onCancel, context }: RemoveTrans
   useEffect(() => {
     if (context.selectedItem) {
       const img = new Image();
-      img.src = convertFileSrc(context.selectedItem.image);
+      img.src = convertFileSrc(context.selectedItem.imagePath);
       img.onload = () => setImage(img);
     }
   }, [context.selectedItem]);

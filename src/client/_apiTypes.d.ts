@@ -6,10 +6,10 @@
 */
 
 export type Folder = (string | null)
-export type Captionprefix = string
-export type Image = string
-export type Caption = string
-export type Captionstr = string
+export type Tagsprefix = string[]
+export type Imagepath = string
+export type Captionpath = string
+export type Tags = string[]
 export type Items = DatasetItem[]
 export type RootModelNoneType = null
 export type Current = string
@@ -40,12 +40,12 @@ export type Right1 = number
 export type Id5 = "view"
 export type Id6 = "concat"
 export type Mode1 = ("horizontal" | "vertical")
-export type Image1 = string
+export type Image = string
 export type Offset = number
 export type Color3 = string
-export type Caption1 = string
-export type Captionprefix1 = string
+export type Tags1 = string[]
 export type RootModelUnionStrNoneType = (string | null)
+export type RootModelListStr = string[]
 export type RootModelStr = string
 export type RootModelBatchOperationPayload = (EscapeOperation | UnescapeOperation | AlignResolutionOperation | DeduplicateTagsOperation | ReplaceTagsOperation | RemoveTagsOperation | RemoveTransparencyOperation)
 export type Id7 = "escape_parentheses"
@@ -61,10 +61,9 @@ export type Id11 = "replace_tags"
 export type Find = string
 export type Replace = string
 export type Id12 = "remove_tags"
-export type Tags = string[]
+export type Tags2 = string[]
 export type Id13 = "remove_transparency"
 export type Color5 = string
-export type RootModelListStr = string[]
 
 /**
  * Commands Input and Output Schemas
@@ -81,6 +80,10 @@ output: RootModelNoneType
 save: {
 input: SaveArgs
 output: RootModelUnionStrNoneType
+}
+set_prefix: {
+input: RootModelListStr
+output: RootModelNoneType
 }
 delete_item: {
 input: RootModelStr
@@ -101,19 +104,18 @@ output: RootModelNoneType
 }
 export interface AppState {
 folder?: Folder
-captionPrefix?: Captionprefix
+tagsPrefix?: Tagsprefix
 items?: Items
 }
 export interface DatasetItem {
-image: Image
-caption: Caption
-captionStr: Captionstr
+imagePath: Imagepath
+captionPath: Captionpath
+tags: Tags
 }
 export interface SaveArgs {
 current: Current
 tool: Tool
-caption: Caption1
-captionPrefix: Captionprefix1
+tags: Tags1
 }
 export interface BrushTool {
 id: Id
@@ -163,7 +165,7 @@ id: Id5
 export interface ConcatTool {
 id: Id6
 mode: Mode1
-image: Image1
+image: Image
 offset: Offset
 color: Color3
 }
@@ -191,7 +193,7 @@ replace: Replace
 }
 export interface RemoveTagsOperation {
 id: Id12
-tags: Tags
+tags: Tags2
 }
 export interface RemoveTransparencyOperation {
 id: Id13

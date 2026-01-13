@@ -1,27 +1,27 @@
 from typing import Iterable, Sequence, Callable, Literal, overload
 from pathlib import Path
 
-def pairwise_common_prefix(a: str, b: str) -> str:
-    result = ''
+def pairwise_common_prefix[T](a: Sequence[T], b: Sequence[T]) -> list[T]:
+    result = []
     for i in range(min(len(a), len(b))):
         if a[i] == b[i]:
-            result += a[i]
+            result.append(a[i])
         else:
             break
     return result
 
-def get_common_prefix(s: Iterable[str]) -> str:
-    first = True
-    result = ''
+def get_common_prefix[T](s: Iterable[Sequence[T]]) -> list[T]:
+    flg = True
+    result = []
 
     for it in s:
-        if first:
-            result = it
-            first = False
+        if flg:
+            flg = False
+            result = list(it)
         else:
             result = pairwise_common_prefix(result, it)
 
-    return result
+    return list(result)
 
 @overload
 def get_caption(file: Path, create: Literal[True]) -> Path: ...

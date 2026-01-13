@@ -13,12 +13,12 @@ class _BaseModel(BaseModel):
 
 
 class DatasetItem(_BaseModel):
-    image: Path
-    caption: Path
-    caption_str: str
+    image_path: Path
+    caption_path: Path
+    tags: list[str]
 
 
 class AppState(_BaseModel):
     folder: Path | None = None
-    caption_prefix: str = ''
+    tags_prefix: list[str] = []
     items: list[DatasetItem] = []

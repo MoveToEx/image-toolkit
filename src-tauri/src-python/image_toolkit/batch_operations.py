@@ -16,44 +16,50 @@ class EscapeOperation(Operation):
     id: Literal['escape_parentheses']
 
     def run(self, state):
-        state.caption_prefix = sub(r'(?<!\\)\(', r'\(', state.caption_prefix)
-        state.caption_prefix = sub(r'(?<!\\)\)', r'\)', state.caption_prefix)
+        for i in range(len(state.tags_prefix)):
+            state.tags_prefix[i] = sub(r'(?<!\\)\(', r'\(', state.tags_prefix[i])
+            state.tags_prefix[i] = sub(r'(?<!\\)\)', r'\)', state.tags_prefix[i])
+
         for it in state.items:
-            it.caption_str = sub(r'(?<!\\)\(', r'\(', it.caption_str)
-            it.caption_str = sub(r'(?<!\\)\)', r'\)', it.caption_str)
-            with open(it.caption, 'w') as f:
-                f.write(state.caption_prefix + it.caption_str)
+            for i in range(len(it.tags)):
+                it.tags[i] = sub(r'(?<!\\)\(', r'\(', it.tags[i])
+                it.tags[i] = sub(r'(?<!\\)\)', r'\)', it.tags[i])
+
+            with open(it.caption_path, 'w') as f:
+                f.write(', '.join(state.tags_prefix + it.tags))
 
 
 class UnescapeOperation(Operation):
     id: Literal['unescape_parentheses']
 
     def run(self, state):
-        state.caption_prefix = sub(r'\\\(', r'(', state.caption_prefix)
-        state.caption_prefix = sub(r'\\\)', r')', state.caption_prefix)
+        for i in range(len(state.tags_prefix)):
+            state.tags_prefix[i] = sub(r'\\\(', r'(', state.tags_prefix[i])
+            state.tags_prefix[i] = sub(r'\\\)', r')', state.tags_prefix[i])
+
         for it in state.items:
-            it.caption_str = sub(r'\\\(', r'(', it.caption_str)
-            it.caption_str = sub(r'\\\)', r')', it.caption_str)
-            with open(it.caption, 'w') as f:
-                f.write(state.caption_prefix + it.caption_str)
+            for i in range(len(it.tags)):
+                it.tags[i] = sub(r'\\\(', r'(', it.tags[i])
+                it.tags[i] = sub(r'\\\)', r')', it.tags[i])
+            
+            with open(it.caption_path, 'w') as f:
+                f.write(', '.join(state.tags_prefix + it.tags))
 
 class DeduplicateTagsOperation(Operation):
     id: Literal['deduplicate_tags']
 
     def run(self, state):
-        prefix_tags = seq(state.caption_prefix.split(',')).map(lambda x: x.strip()).to_set()
+        prefix_tags = set(state.tags_prefix)
         for it in state.items:
-            tags = seq(it.caption_str.split(',')).map(lambda x: x.strip()).to_list()
-            result = []
-            for tag in tags:
-                if tag not in result and tag not in prefix_tags:
-                    result.append(tag)
-            s = ', '.join(result)
+            tags = []
+            for tag in it.tags:
+                if tag not in tags and tag not in prefix_tags:
+                    tags.append(tag)
 
-            if s != it.caption_str:
-                with open(it.caption, 'w') as f:
-                    f.write(state.caption_prefix + s)
-                it.caption_str = s
+            if tags != it.tags:
+                with open(it.caption_path, 'w') as f:
+                    f.write(', '.join(state.tags_prefix + tags))
+                it.tags = tags
 
 class ReplaceTagsOperation(Operation):
     id: Literal['replace_tags']
@@ -62,9 +68,8 @@ class ReplaceTagsOperation(Operation):
 
     def run(self, state):
         for it in state.items:
-            tags = seq(it.caption_str.split(',')).map(lambda x: x.strip()).to_list()
             result = []
-            for tag in tags:
+            for tag in it.tags:
                 if tag == self.find:
                     if len(self.replace) == 0:
                         continue
@@ -72,12 +77,11 @@ class ReplaceTagsOperation(Operation):
                         result.append(self.replace)
                 else:
                     result.append(tag)
-            s = ', '.join(result)
             
-            if s != it.caption_str:
-                with open(it.caption, 'w') as f:
-                    f.write(state.caption_prefix + s)
-                it.caption_str = s
+            if result != it.tags:
+                with open(it.caption_path, 'w') as f:
+                    f.write(', '.join(state.tags_prefix + result))
+                it.tags = result
     
 class RemoveTagsOperation(Operation):
     id: Literal['remove_tags']
@@ -85,10 +89,9 @@ class RemoveTagsOperation(Operation):
 
     def run(self, state):
         for it in state.items:
-            tags = seq(it.caption_str.split(',')).map(lambda x: x.strip()).to_list()
             result = []
 
-            for tag in tags:
+            for tag in it.tags:
                 rm = False
 
                 for pattern in self.tags:
@@ -103,11 +106,10 @@ class RemoveTagsOperation(Operation):
                 if not rm:
                     result.append(tag)
 
-            s = ', '.join(result)
-            if s != it.caption_str:
-                with open(it.caption, 'w') as f:
-                    f.write(state.caption_prefix + s)
-                it.caption_str = s
+            if result != it.tags:
+                with open(it.caption_path, 'w') as f:
+                    f.write(', '.join(state.tags_prefix + result))
+                it.tags = result
 
 
 class AlignResolutionOperation(Operation):
@@ -124,28 +126,25 @@ class AlignResolutionOperation(Operation):
 
         for it in state.items:
             result = bg.copy()
-            img = Image.open(it.image)
+            img = Image.open(it.image_path)
             width, height = img.size
             ratio = min(self.width / width, self.height / height)
             
             img = img.resize((int(width * ratio), int(height * ratio)), Image.Resampling.LANCZOS)
             width, height = img.size
 
-            tags = seq((state.caption_prefix + it.caption_str).split(',')).map(lambda i: i.strip()).to_list()
-            modified = False
+            tags = it.tags.copy()
 
             if abs(width - self.width) > abs(height - self.height) and self.box_tag:
                 if 'pillarboxed' not in tags:
-                    it.caption_str = ', '.join(tags) + ', pillarboxed'
-                    modified = True
+                    tags.append('pillarboxed')
             if abs(height - self.height) > abs(width - self.width) and self.box_tag:
                 if 'letterboxed' not in tags:
-                    it.caption_str = ', '.join(tags) + ', letterboxed'
-                    modified = True
+                    tags.append('letterboxed')
 
-            if modified:
-                with open(it.caption, 'w') as f:
-                    f.write(it.caption_str)
+            if tags != it.tags:
+                with open(it.caption_path, 'w') as f:
+                    f.write(', '.join(state.tags_prefix + it.tags))
             
             left, top = 0, 0
 
@@ -167,7 +166,7 @@ class AlignResolutionOperation(Operation):
                 top, left = (self.height - height) // 2, (self.width - width) // 2
 
             result.paste(img, (left, top))
-            result.save(it.image)
+            result.save(it.image_path)
 
 class RemoveTransparencyOperation(Operation):
     id: Literal['remove_transparency']
@@ -175,7 +174,7 @@ class RemoveTransparencyOperation(Operation):
 
     def run(self, state):
         for it in state.items:
-            img = Image.open(it.image)
+            img = Image.open(it.image_path)
             
             if not img.has_transparency_data:
                 continue
@@ -184,4 +183,4 @@ class RemoveTransparencyOperation(Operation):
 
             result.alpha_composite(img)
 
-            result.save(it.image)
+            result.save(it.image_path)

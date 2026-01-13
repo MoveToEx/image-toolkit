@@ -31,6 +31,13 @@ export async function save(
     return await pyInvoke("save", body, options);
 }
 
+export async function setPrefix(
+    body: Commands["set_prefix"]["input"],
+    options?: InvokeOptions
+): Promise<Commands["set_prefix"]["output"]> {
+    return await pyInvoke("set_prefix", body, options);
+}
+
 export async function deleteItem(
     body: Commands["delete_item"]["input"],
     options?: InvokeOptions

@@ -9,7 +9,7 @@ import FilesPanel from './components/files-panel';
 import CaptionPanel from './components/caption-panel';
 import ImagePanel from './components/image-panel';
 import { useAppState } from './lib/hooks';
-import { closeFolder, save, deleteItem, onDrag } from './client/apiClient';
+import { closeFolder, save, deleteItem, onDrag, setPrefix } from './client/apiClient';
 
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen, TauriEvent } from '@tauri-apps/api/event';
@@ -70,13 +70,12 @@ function App() {
   const { appState, select, refresh, loading } = useAppState();
   const [selected, setSelected] = useState<string | null>(null);
   const selectedItem = useMemo(
-    () => appState.items?.find(it => it.image === selected),
+    () => appState.items?.find(it => it.imagePath === selected),
     [appState, selected]
   );
 
   // Temporary State
-  const [tempCaption, setTempCaption] = useState<string>('');
-  const [tempPrefix, setTempPrefix] = useState<string>('');
+  const [tempCaption, setTempCaption] = useState<string[]>([]);
 
   // used only for refreshing image
   const [timestamp, setTimestamp] = useState(() => new Date().getTime());
@@ -86,15 +85,9 @@ function App() {
 
   useEffect(() => {
     if (selectedItem) {
-      setTempCaption(selectedItem.captionStr);
+      setTempCaption(selectedItem.tags);
     }
   }, [selectedItem]);
-
-  useEffect(() => {
-    if (appState.captionPrefix !== undefined) {
-      setTempPrefix(appState.captionPrefix);
-    }
-  }, [appState.captionPrefix]);
 
   const itemsRef = useRef(appState.items);
   useEffect(() => {
@@ -110,7 +103,7 @@ function App() {
     new SplitTool(),
     new TrimTool(),
     new ExpandTool(),
-    new ConcatTool(() => itemsRef.current?.map(i => i.image) ?? [])
+    new ConcatTool(() => itemsRef.current?.map(i => i.imagePath) ?? [])
   ], []);
 
   // Tool State
@@ -144,6 +137,15 @@ function App() {
     setToolState(activeTool.init());
   };
 
+  const handlePrefixChange = async (val: string[]) => {
+    setRunning(true);
+    await inspected(async () => {
+      await setPrefix(val);
+    }, 'Saved');
+    await refresh();
+    setRunning(false);
+  }
+
   const handleSave = async () => {
     setRunning(true);
 
@@ -153,9 +155,8 @@ function App() {
         id: activeTool.id,
         ...toolData
       },
-      current: selectedItem!.image,
-      caption: tempCaption,
-      captionPrefix: tempPrefix,
+      current: selectedItem!.imagePath,
+      tags: tempCaption
     };
 
     let nextSelected = await inspected(async () => {
@@ -293,7 +294,7 @@ function App() {
               )}
               {appState.folder && selectedItem && (
                 <ImagePanel
-                  src={convertFileSrc(selectedItem.image) + `?_=${timestamp}`}
+                  src={convertFileSrc(selectedItem.imagePath) + `?_=${timestamp}`}
                   activeTool={activeTool}
                   toolState={toolState}
                   onToolStateChange={setToolState}
@@ -304,10 +305,8 @@ function App() {
             <ResizablePanel defaultSize={20}>
               {selectedItem && (
                 <CaptionPanel
-                  caption={tempCaption}
-                  onCaptionChange={setTempCaption}
-                  prefix={tempPrefix}
-                  onPrefixChange={setTempPrefix}
+                  tags={tempCaption}
+                  onTagsChange={setTempCaption}
                 />
               )}
             </ResizablePanel>
@@ -318,7 +317,7 @@ function App() {
         <ResizablePanel defaultSize={20}>
 
           <FilesPanel
-            items={appState.items?.map(val => val.image) ?? []}
+            items={appState.items?.map(val => val.imagePath) ?? []}
             onSelect={val => {
               // Explicitly reset tool when image changes to avoid stale state from previous image dimensions
               // But 'View' tool might need to persist? 
@@ -329,6 +328,9 @@ function App() {
             }}
             selected={selected}
             onDelete={handleDelete}
+            prefix={appState.tagsPrefix}
+            prefixDisabled={running}
+            onPrefixChange={handlePrefixChange}
           />
 
         </ResizablePanel>
